@@ -9,5 +9,6 @@ edition = "2021"
 libdlt = { path = "../libdlt"}
 dlt-core = "0.14"
 thiserror = "1.0.38"
+async-std = "1.12.0"
 
 
