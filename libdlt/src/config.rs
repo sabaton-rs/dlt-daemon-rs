@@ -38,6 +38,7 @@ pub struct DaemonConfig {
     pub ring_buffer_min_size : u32,
     pub ring_buffer_max_size : u32,
     pub ring_buffer_step_size : u32,
+    pub daemon_fifo_size: u32,
     
     // TODO: Other config fields
 }
@@ -60,6 +61,7 @@ impl Default for DaemonConfig {
             ring_buffer_min_size: 500000,
             ring_buffer_max_size: 10000000,
             ring_buffer_step_size: 500000,
+            daemon_fifo_size: 65536,
         }
     } 
 
@@ -90,8 +92,23 @@ impl DaemonConfig {
                                 }
                                 ("daemonize",Some(value)) => {
                                     let val: u32 = value.parse().unwrap();
+                                    println!("Daemon:{val}");
                                     if val > 0 {
                                         conf.daemonize = true;
+                                    }
+                                }
+                                ("send_serial_header",Some(value)) =>{
+                                    let val: u32 = value.parse().unwrap();
+                                    println!("serial: {val}");
+                                    if val > 0 {
+                                        conf.send_serial_header = true;
+                                    }
+                                }
+                                ("send_context_registration",Some(value)) =>{
+                                    let val: u32 = value.parse().unwrap();
+                                    println!("context_Reg: {val}");
+                                    if val > 0 {
+                                        conf.send_context_registration = true;
                                     }
                                 }
                                 //TODO: implement remaining configs
@@ -116,7 +133,11 @@ mod tests {
  
     #[test]
     fn basic() {
-        let config = DaemonConfig::from_file("testdata/daemon.conf").unwrap();
+        let config = DaemonConfig::from_file("/home/devuser/dlt/dlt-daemon-rs/libdlt/testdata/daemon.conf").unwrap();
         assert!(config.verbose);
+        assert!(config.daemonize,"{}", 1);
+        assert!(config.send_serial_header,"{}", true);
+        assert!(config.send_context_registration);
+        
     }
 }
