@@ -1,4 +1,4 @@
-use std::{path::{PathBuf, Path}, time::Duration, str::FromStr};
+use std::{path::{PathBuf, Path}, time::Duration};
 
 use ini::configparser::ini::Ini;
 
@@ -33,8 +33,11 @@ pub enum DltLogLevel {
     DltLogDebug,
     DltLogVerbose,
 }
-
-
+#[derive(Debug,PartialEq)]
+pub enum OfflineTraceFileName {
+    TimeStampBased,
+    IndexBased,
+}
 
 pub struct DaemonConfig {
     pub verbose : bool,
@@ -47,6 +50,7 @@ pub struct DaemonConfig {
     pub shared_memory_size : u32,
     pub persistance_storage_path : PathBuf,
     pub logging_mode : DaemonLoggingMode,
+    //LoggingFilename
     pub logging_level : LogLevel,
     pub timeout_on_send : Duration,
     pub ring_buffer_min_size : u32,
@@ -57,7 +61,7 @@ pub struct DaemonConfig {
     pub context_trace_status: bool,
     pub force_context_loglevel_and_tracestatus: bool,
     pub injection_mode: bool,
-    
+ 
     // TODO: Other config fields
 }
 
@@ -85,8 +89,6 @@ impl Default for DaemonConfig {
             force_context_loglevel_and_tracestatus: false,
             injection_mode: true,
 
-
-
         }
     } 
 
@@ -107,73 +109,88 @@ impl DaemonConfig {
                 match section.as_str() {
                     "default" => {  // Default section
                         for (k,v) in map.iter() {
+                            // println!("k:{},v:{:?}",k,v);
                             match (k.as_str(),v) {
                                 ("verbose",Some(value)) => {
                                     let val: u32 = value.parse().unwrap();
-                                    println!("Value:{val}");
-                                    if val > 0 {
+                                    //println!("Value:{val}");
+                                    if val == 0 {
+                                        conf.verbose = false;
+                                    }
+                                    else {
                                         conf.verbose = true;
                                     } 
                                 }
                                 ("daemonize",Some(value)) => {
                                     let val: u32 = value.parse().unwrap();
                                     // println!("Daemon:{val}");
-                                    if val > 0 {
+                                    if val == 0 {
+                                        conf.daemonize = false;
+                                    }
+                                    else {
                                         conf.daemonize = true;
                                     }
                                 }
-                                ("send_serial_header",Some(value)) =>{
+                                ("sendserialheader",Some(value)) =>{
                                     let val: u32 = value.parse().unwrap();
                                     // println!("serial: {val}");
-                                    if val > 0 {
+                                    if val == 0 {
+                                        conf.send_serial_header = false;
+                                    }
+                                    else {
                                         conf.send_serial_header = true;
                                     }
                                 }
-                                ("send_context_registration",Some(value)) =>{
+                                ("sendcontextregistration",Some(value)) =>{
                                     let val: u32 = value.parse().unwrap();
                                     // println!("context_Reg: {val}");
-                                    if val > 0 {
+                                    if val == 0 {
+                                        conf.send_context_registration = false;
+                                    }
+                                    else {
                                         conf.send_context_registration = true;
                                     }
                                 }
-                                ("send_context_registration_option",Some(value)) =>{
+                                ("sendcontextregistrationoption",Some(value)) =>{
                                     let val: u32 = value.parse().unwrap();
                                     // println!("con_reg_opt: {val}");
                                     if val > 0 {
                                         conf.send_context_registration_option = 7;
                                     }
                                 }
-                                ("send_message_time",Some(value)) =>{
+                                ("sendmessagetime",Some(value)) =>{
                                     let val: u32 = value.parse().unwrap();
                                     // println!("message time: {val}");
-                                    if val > 0 {
-                                        conf.send_message_time= true;
+                                    if val == 0 {
+                                        conf.send_message_time= false;
+                                    }
+                                    else {
+                                        conf.send_message_time =true;
                                     }
                                 }
-                                ("ecu_id",Some(value)) =>{
+                                ("ecuid",Some(value)) =>{
                                     let val: String = value.parse().unwrap();
                                     // println!("ecu_id: {val}");
-                                    if val.contains("ECU1") {
-                                        conf.ecu_id= String::from("ECU1");
+                                    if val.len() == 4 {
+                                        conf.ecu_id= String::from(val);
                                     }
                                 }
-                                ("shared_memory_size",Some(value)) =>{
+                                ("sharedmemorysize",Some(value)) =>{
                                     let val: u32 = value.parse().unwrap();
                                     // println!("shared_memory_value: {val}");
                                     if val > 0 {
-                                        conf.shared_memory_size = 100000;
+                                        conf.shared_memory_size = val;
                                     }
                                 }
-                                ("persistance_storage_path",Some(value)) =>{
+                                ("persistancestoragepath",Some(value)) =>{
                                     let val: PathBuf = value.parse().unwrap();
                                     //println!("path: {val}");
-                                    if val.is_file() {
-                                        conf.persistance_storage_path = PathBuf::from("/tmp");
-                                    }
+                                        conf.persistance_storage_path = val;
+                                    
                                 }
-                                ("logging_mode",Some(value)) => {
+                                ("loggingmode",Some(value)) => {
                                     let val: u32 = value.parse().unwrap();
-                                    // println!("logmode: {val}");
+                                    //println!("logmode: {val}");
                                     match val {
                                             0 => conf.logging_mode = DaemonLoggingMode::Stdout,
                                             1 => conf.logging_mode = DaemonLoggingMode::Syslog,
@@ -182,9 +199,9 @@ impl DaemonConfig {
                                             _=>  conf.logging_mode = DaemonLoggingMode::Stdout,
                                     };
                                 }
-                                ("logging_level",Some(value)) => {
+                                ("logginglevel",Some(value)) => {
                                     let val: u32 = value.parse().unwrap();
-                                    // println!("log_level: {val}");
+                                    //println!("log_level: {val}");
                                     match val {
                                             0 => conf.logging_level = LogLevel::Emergency,
                                             1 => conf.logging_level = LogLevel::Alert,
@@ -197,44 +214,44 @@ impl DaemonConfig {
                                             _=>  conf.logging_level = LogLevel::Info,
                                     };
                                 }
-                                ("timeout_on_send",Some(value)) =>{
-                                    let val: u32 = value.parse().unwrap();
-                                    // println!("timeout_on_send: {val}");
+                                ("timeoutonsend",Some(value)) =>{
+                                    let val: u64 = value.parse().unwrap();
+                                    //println!("timeout_on_send: {val}");
                                     if val > 0 {
-                                        conf.timeout_on_send = Duration::from_secs(4);
+                                        conf.timeout_on_send = Duration::from_secs(val);
                                     }
                                 }
-                                ("ring_buffer_min_size",Some(value)) =>{
+                                ("ringbufferminsize",Some(value)) =>{
                                     let val: u32 = value.parse().unwrap();
-                                    // println!("ring_buffer_min_size: {val}");
+                                    //println!("ring_buffer_min_size: {val}");
                                     if val > 0 {
-                                        conf.ring_buffer_min_size = 500000;
+                                        conf.ring_buffer_min_size = val;
                                     }
                                 }
-                                ("ring_buffer_max_size",Some(value)) =>{
+                                ("ringbuffermaxsize",Some(value)) =>{
                                     let val: u32 = value.parse().unwrap();
-                                    // println!("ring_buffer_max_size: {val}");
+                                    //println!("ring_buffer_max_size: {val}");
                                     if val > 0 {
-                                        conf.ring_buffer_max_size = 10000000;
+                                        conf.ring_buffer_max_size = val;
                                     }
                                 }
-                                ("ring_buffer_step_size",Some(value)) =>{
+                                ("ringbufferstepsize",Some(value)) =>{
                                     let val: u32 = value.parse().unwrap();
-                                    // println!("ring_buffer_step_size: {val}");
+                                    //println!("ring_buffer_step_size: {val}");
                                     if val > 0 {
-                                        conf.ring_buffer_step_size = 500000;
+                                        conf.ring_buffer_step_size = val;
                                     }
                                 }
-                                ("daemon_fifo_size",Some(value)) =>{
+                                ("daemonfifosize",Some(value)) =>{
                                     let val: u32 = value.parse().unwrap();
                                     // println!("daemon_fifo_size: {val}");  
                                     if val > 0 {
-                                        conf.daemon_fifo_size = 65536;
+                                        conf.daemon_fifo_size = val;
                                     }
                                 }
-                                ("context_log_level",Some(value)) => {
+                                ("contextloglevel",Some(value)) => {
                                     let val: u32 = value.parse().unwrap();
-                                    // println!("dltlog: {val}");
+                                    //println!("dltlog: {val}");
                                     match val {
                                             0 => conf.context_log_level = DltLogLevel::DltLogOff,
                                             1 => conf.context_log_level = DltLogLevel::DltLogFatal,
@@ -246,24 +263,33 @@ impl DaemonConfig {
                                             _=>  conf.context_log_level = DltLogLevel::DltLogInfo,
                                     };
                                 }
-                                ("context_trace_status",Some(value)) =>{
+                                ("contexttracestatus",Some(value)) =>{
                                     let val: u32 = value.parse().unwrap();
                                     // println!("context_trace_status: {val}");  
-                                    if val > 0 {
+                                    if val == 0 {
+                                        conf.context_trace_status = false;
+                                    }
+                                    else {
                                         conf.context_trace_status = true;
                                     }   
                                 }
-                                ("force_context_loglevel_and_tracestatus",Some(value)) =>{
+                                ("forcecontextloglevelandtracestatus",Some(value)) =>{
                                     let val: u32 = value.parse().unwrap();
-                                    // println!("force_context_loglevel_and_tracestatus: {val}");  
-                                    if val > 0 {
+                                    //println!("force_context_loglevel_and_tracestatus: {val}");  
+                                    if val == 0 {
+                                        conf.force_context_loglevel_and_tracestatus = false;
+                                    }
+                                    else {
                                         conf.force_context_loglevel_and_tracestatus = true;
                                     }   
                                 }
-                                ("injection_mode",Some(value)) =>{
+                                ("injectionmode",Some(value)) =>{
                                     let val: u32 = value.parse().unwrap();
                                     // println!("injection_mode: {val}");  
-                                    if val > 0 {
+                                    if val == 0 {
+                                        conf.injection_mode = false;
+                                    }
+                                    else {
                                         conf.injection_mode = true;
                                     }   
                                 }
@@ -297,7 +323,7 @@ mod tests {
         assert!(config.send_serial_header);
         assert!(config.send_context_registration);
         assert_eq!(config.send_context_registration_option,7);
-        assert!(config.send_message_time);
+        assert_eq!(config.send_message_time,false);
         assert_eq!(config.ecu_id,"ECU1");
         assert_eq!(config.shared_memory_size,100000);
         assert_eq!(config.persistance_storage_path, PathBuf::from("/tmp"));
