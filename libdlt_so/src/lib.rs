@@ -26,6 +26,7 @@ pub extern "C" fn dlt_init() -> DltReturnValue {
     DltReturnValue::DLT_RETURN_OK
 }
 
+#[no_mangle]
 pub extern "C" fn dlt_free() -> DltReturnValue {
     DltReturnValue::DLT_RETURN_OK
 }
