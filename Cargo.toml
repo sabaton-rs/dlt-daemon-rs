@@ -3,5 +3,6 @@
 members = [
     "daemon",
     "libdlt",
-    "dlt-user"
+    "dlt-user",
+    "libdlt_so",
 ]
