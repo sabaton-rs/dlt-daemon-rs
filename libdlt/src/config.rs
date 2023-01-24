@@ -1,4 +1,4 @@
-use std::{path::{PathBuf}, time::Duration, net::Ipv4Addr};
+use std::{path::{PathBuf}, time::Duration, net::{Ipv4Addr, IpAddr}};
 
 use ini::configparser::ini::Ini;
 
@@ -58,7 +58,7 @@ fn is_valid_ip(ip:String)->bool {
     }
     let ch = ".";
     let count = ip.matches(ch).count();
-    println!("valid '.'= {}",count);
+    //println!("valid '.'= {}",count);
     if count==3 {
         return true
     }
@@ -202,11 +202,9 @@ impl DaemonConfig {
                 match section.as_str() {
                     "default" => {  // Default section
                         for (k,v) in map.iter() {
-                            println!("k:{},v:{:?}",k,v);
                             match (k.as_str(),v) {
                                 ("verbose",Some(value)) => {
                                     let val: u32 = value.parse().unwrap();
-                                    //println!("Value:{val}");
                                     if val == 0 {
                                         conf.verbose = false;
                                     }
@@ -216,7 +214,6 @@ impl DaemonConfig {
                                 }
                                 ("daemonize",Some(value)) => {
                                     let val: u32 = value.parse().unwrap();
-                                    // println!("Daemon:{val}");
                                     if val == 0 {
                                         conf.daemonize = false;
                                     }
@@ -226,7 +223,6 @@ impl DaemonConfig {
                                 }
                                 ("sendserialheader",Some(value)) =>{
                                     let val: u32 = value.parse().unwrap();
-                                    // println!("serial: {val}");
                                     if val == 0 {
                                         conf.send_serial_header = false;
                                     }
@@ -236,7 +232,6 @@ impl DaemonConfig {
                                 }
                                 ("sendcontextregistration",Some(value)) =>{
                                     let val: u32 = value.parse().unwrap();
-                                    // println!("context_Reg: {val}");
                                     if val == 0 {
                                         conf.send_context_registration = false;
                                     }
@@ -246,21 +241,17 @@ impl DaemonConfig {
                                 }
                                 ("sendcontextregistrationoption",Some(value)) =>{
                                     let val: u32 = value.parse().unwrap();
-                                    // println!("con_reg_opt: {val}");
-                                    match val{
-                                        3 => conf.send_context_registration_option = SendContextRegistrationOption::Apid,
-                                        //3 => conf.send_context_registration_option = SendContextRegistrationOption::CTID,
-                                        4 => conf.send_context_registration_option = SendContextRegistrationOption::Loglevel,
-                                        5 => conf.send_context_registration_option = SendContextRegistrationOption::Tracestatus,
-                                        //6 => conf.send_context_registration_option = SendContextRegistrationOption::Ll,
-                                        6 => conf.send_context_registration_option = SendContextRegistrationOption::TS,
-                                        7 => conf.send_context_registration_option = SendContextRegistrationOption::Description,
-                                        _ => conf.send_context_registration_option = SendContextRegistrationOption::Description,
-                                    }
+                                    conf.send_context_registration_option = match val{
+                                        3 => SendContextRegistrationOption::Apid,
+                                        4 => SendContextRegistrationOption::Loglevel,
+                                        5 => SendContextRegistrationOption::Tracestatus,
+                                        6 => SendContextRegistrationOption::TS,
+                                        7 => SendContextRegistrationOption::Description,
+                                        _ => SendContextRegistrationOption::Description,
+                                        }
                                 }
                                 ("sendmessagetime",Some(value)) =>{
                                     let val: u32 = value.parse().unwrap();
-                                    // println!("message time: {val}");
                                     if val == 0 {
                                         conf.send_message_time= false;
                                     }
@@ -270,7 +261,6 @@ impl DaemonConfig {
                                 }
                                 ("ecuid",Some(value)) =>{
                                     let val: String = value.parse().unwrap();
-                                    // println!("ecu_id: {val}");
                                     if val.len() == 0 {
                                         conf.ecu_id = String::from("ECU1");    
                                     }
@@ -283,95 +273,84 @@ impl DaemonConfig {
                                 }
                                 ("sharedmemorysize",Some(value)) =>{
                                     let val: u32 = value.parse().unwrap();
-                                    // println!("shared_memory_value: {val}");
                                     if val > 0 {
                                         conf.shared_memory_size = val;
                                     }
                                 }
                                 ("persistancestoragepath",Some(value)) =>{
                                     let val: PathBuf = value.parse().unwrap();
-                                    //println!("path: {val}");
                                         conf.persistance_storage_path = val;
                                     
                                 }
                                 ("loggingmode",Some(value)) => {
                                     let val: u32 = value.parse().unwrap();
-                                    //println!("logmode: {val}");
-                                    match val {
-                                            0 => conf.logging_mode = DaemonLoggingMode::Stdout,
-                                            1 => conf.logging_mode = DaemonLoggingMode::Syslog,
-                                            2 => conf.logging_mode = DaemonLoggingMode::StdError,
-                                            3 => conf.logging_mode = DaemonLoggingMode::File(PathBuf::from("/tmp/dlt.log")),
-                                            _=>  conf.logging_mode = DaemonLoggingMode::Stdout,
+                                    conf.logging_mode = match val {
+                                            0 => DaemonLoggingMode::Stdout,
+                                            1 => DaemonLoggingMode::Syslog,
+                                            2 => DaemonLoggingMode::StdError,
+                                            3 => DaemonLoggingMode::File(PathBuf::from("/tmp/dlt.log")),
+                                            _ => DaemonLoggingMode::Stdout,
                                     };
                                 }
                                 ("logginglevel",Some(value)) => {
                                     let val: u32 = value.parse().unwrap();
-                                    //println!("log_level: {val}");
-                                    match val {
-                                            0 => conf.logging_level = LogLevel::Emergency,
-                                            1 => conf.logging_level = LogLevel::Alert,
-                                            2 => conf.logging_level = LogLevel::Critical,
-                                            3 => conf.logging_level = LogLevel::Error,
-                                            4 => conf.logging_level = LogLevel::Warning,
-                                            5 => conf.logging_level = LogLevel::Notice,
-                                            6 => conf.logging_level = LogLevel::Info,
-                                            7 => conf.logging_level = LogLevel::Debug,
-                                            _=>  conf.logging_level = LogLevel::Info,
+                                    conf.logging_level = match val {
+                                            0 => LogLevel::Emergency,
+                                            1 => LogLevel::Alert,
+                                            2 => LogLevel::Critical,
+                                            3 => LogLevel::Error,
+                                            4 => LogLevel::Warning,
+                                            5 => LogLevel::Notice,
+                                            6 => LogLevel::Info,
+                                            7 => LogLevel::Debug,
+                                            _ => LogLevel::Info,
                                     };
                                 }
                                 ("timeoutonsend",Some(value)) =>{
                                     let val: u64 = value.parse().unwrap();
-                                    //println!("timeout_on_send: {val}");
                                     if val > 0 {
                                         conf.timeout_on_send = Duration::from_secs(val);
                                     }
                                 }
                                 ("ringbufferminsize",Some(value)) =>{
                                     let val: u32 = value.parse().unwrap();
-                                    //println!("ring_buffer_min_size: {val}");
                                     if val > 0 {
                                         conf.ring_buffer_min_size = val;
                                     }
                                 }
                                 ("ringbuffermaxsize",Some(value)) =>{
                                     let val: u32 = value.parse().unwrap();
-                                    //println!("ring_buffer_max_size: {val}");
                                     if val > 0 {
                                         conf.ring_buffer_max_size = val;
                                     }
                                 }
                                 ("ringbufferstepsize",Some(value)) =>{
                                     let val: u32 = value.parse().unwrap();
-                                    //println!("ring_buffer_step_size: {val}");
                                     if val > 0 {
                                         conf.ring_buffer_step_size = val;
                                     }
                                 }
                                 ("daemonfifosize",Some(value)) =>{
                                     let val: u32 = value.parse().unwrap();
-                                    // println!("daemon_fifo_size: {val}");  
                                     if val > 0 {
                                         conf.daemon_fifo_size = val;
                                     }
                                 }
                                 ("contextloglevel",Some(value)) => {
                                     let val: u32 = value.parse().unwrap();
-                                    //println!("dltlog: {val}");
-                                    match val {
-                                            0 => conf.context_log_level = DltLogLevel::DltLogOff,
-                                            1 => conf.context_log_level = DltLogLevel::DltLogFatal,
-                                            2 => conf.context_log_level = DltLogLevel::DltLogError,
-                                            3 => conf.context_log_level = DltLogLevel::DltLogWarn,
-                                            4 => conf.context_log_level = DltLogLevel::DltLogInfo,
-                                            5 => conf.context_log_level = DltLogLevel::DltLogDebug,
-                                            6 => conf.context_log_level = DltLogLevel::DltLogVerbose,
-                                            _=>  conf.context_log_level = DltLogLevel::DltLogInfo,
+                                    conf.context_log_level = match val {
+                                            0 => DltLogLevel::DltLogOff,
+                                            1 => DltLogLevel::DltLogFatal,
+                                            2 => DltLogLevel::DltLogError,
+                                            3 => DltLogLevel::DltLogWarn,
+                                            4 => DltLogLevel::DltLogInfo,
+                                            5 => DltLogLevel::DltLogDebug,
+                                            6 => DltLogLevel::DltLogVerbose,
+                                            _=>  DltLogLevel::DltLogInfo,
                                     };
                                 }
                                 ("contexttracestatus",Some(value)) =>{
-                                    let val: u32 = value.parse().unwrap();
-                                    // println!("context_trace_status: {val}");  
+                                    let val: u32 = value.parse().unwrap(); 
                                     if val == 0 {
                                         conf.context_trace_status = false;
                                     }
@@ -381,7 +360,6 @@ impl DaemonConfig {
                                 }
                                 ("forcecontextloglevelandtracestatus",Some(value)) =>{
                                     let val: u32 = value.parse().unwrap();
-                                    //println!("force_context_loglevel_and_tracestatus: {val}");  
                                     if val == 0 {
                                         conf.force_context_loglevel_and_tracestatus = false;
                                     }
@@ -390,8 +368,7 @@ impl DaemonConfig {
                                     }   
                                 }
                                 ("injectionmode",Some(value)) =>{
-                                    let val: u32 = value.parse().unwrap();
-                                    // println!("injection_mode: {val}");  
+                                    let val: u32 = value.parse().unwrap(); 
                                     if val == 0 {
                                         conf.injection_mode = false;
                                     }
@@ -400,8 +377,7 @@ impl DaemonConfig {
                                     }   
                                 }
                                 ("gatewaymode",Some(value)) =>{
-                                    let val: u32 = value.parse().unwrap();
-                                    //println!("gatewaymode: {val}");  
+                                    let val: u32 = value.parse().unwrap(); 
                                     if val == 0 {
                                         conf.gateway_mode = false;
                                     }
@@ -422,43 +398,35 @@ impl DaemonConfig {
                                         conf.control_socket_path= val;
                                 }
                                 ("offlinetracedirectory",Some(value)) =>{
-                                    //let val  = value.parse().unwrap();
-                                    //println!("offline_trace_directory: {val}");  
                                     if value.is_empty(){
                                         conf.offline_trace_directory = None;
-                                        //conf.offline_trace_directory = Some(false);
                                     }
                                     else {
-                                        //conf.offline_trace_directory = Some(true);
                                         conf.offline_trace_directory = Some(PathBuf::from(value));
                                     }   
                                 }
                                 ("offlinetracefilesize",Some(value)) =>{
                                     let val: u32 = value.parse().unwrap();
-                                    //println!("offline_trace_file_size:{val}");
                                     if val > 0 {
                                         conf.offline_trace_file_size= val;
                                     }
                                 }
                                 ("offlinetracemaxsize",Some(value)) =>{
                                     let val: u32 = value.parse().unwrap();
-                                    //println!("offline_trace_max_size: {val}");
                                     if val > 0 {
                                         conf.offline_trace_max_size = val;
                                     }
                                 }
                                 ("offlinetracefilenametimestampbased",Some(value)) =>{
                                     let val: u32 = value.parse().unwrap();
-                                    //println!("offlinetracefilenametimestampbased: {val}");
-                                    match val {
-                                        0 => conf.offline_trace_file_name = OfflineTraceFileName::OfflineTraceFileNameIndexBased,
-                                        1 => conf.offline_trace_file_name = OfflineTraceFileName::OfflineTraceFileNameTimeStampBased,
-                                        _=>  conf.offline_trace_file_name = OfflineTraceFileName::OfflineTraceFileNameTimeStampBased,
+                                    conf.offline_trace_file_name = match val {
+                                        0 => OfflineTraceFileName::OfflineTraceFileNameIndexBased,
+                                        1 => OfflineTraceFileName::OfflineTraceFileNameTimeStampBased,
+                                        _ => OfflineTraceFileName::OfflineTraceFileNameTimeStampBased,
                                     };
                                 }
                                 ("printascii",Some(value)) => {
                                     let val:u32 = value.parse().unwrap();
-                                    //println!("printascii: {val}");
                                     if val == 0 {
                                         conf.print_ascii = false;
                                     }
@@ -468,7 +436,6 @@ impl DaemonConfig {
                                 }
                                 ("printhex",Some(value)) => {
                                     let val:u32 = value.parse().unwrap();
-                                    //println!("printhex: {val}");
                                     if val == 0 {
                                         conf.print_hex = false;
                                     }
@@ -478,7 +445,6 @@ impl DaemonConfig {
                                 }
                                 ("printheadersonly",Some(value)) => {
                                     let val:u32 = value.parse().unwrap();
-                                    //println!("print_headers_only: {val}");
                                     if val == 0 {
                                         conf.print_headers_only = false;
                                     }
@@ -496,14 +462,12 @@ impl DaemonConfig {
                                 }
                                 ("rs232baudrate",Some(value)) =>{
                                     let val: u32 = value.parse().unwrap();
-                                    //println!("rs232baudrate:{val}");
                                     if val > 0 {
                                         conf.rs232_baudrate= val;
                                     }
                                 }
                                 ("rs232syncserialheader",Some(value)) =>{
                                     let val: u32 = value.parse().unwrap();
-                                    //println!("rs232_sync_serial_header:{val}");
                                     if val == 0 {
                                         conf.rs232_sync_serial_header = false;
                                     }
@@ -513,7 +477,6 @@ impl DaemonConfig {
                                 }
                                 ("tcpsyncserialheader",Some(value)) =>{
                                     let val: u32 = value.parse().unwrap();
-                                    //println!("tcpsyncserialheader:{val}");
                                     conf.tcpsync_serial_header = if val == 0 {
                                         false
                                     }
@@ -523,7 +486,6 @@ impl DaemonConfig {
                                 }
                                 ("sendecusoftwareversion",Some(value)) =>{
                                     let val: u32 = value.parse().unwrap();
-                                    //println!("sendecusoftwareversion:{val}");
                                         conf.send_ecusoftware_version = val;
                                 }
                                 ("pathtoecusoftwareversion",Some(value)) => {
@@ -536,12 +498,10 @@ impl DaemonConfig {
                                 }
                                 ("sendtimezone",Some(value)) =>{
                                     let val: u32 = value.parse().unwrap();
-                                    //println!("sendtimezone:{val}");
                                         conf.send_timezone = val;
                                 }
                                 ("offlinelogstoragemaxdevices",Some(value)) =>{
                                     let val: u32 = value.parse().unwrap();
-                                    //println!("offlinelogstoragemaxdevices:{val}");
                                     if val == 0 {
                                         conf.offline_logstorage_max_devices = false;
                                     }
@@ -559,7 +519,6 @@ impl DaemonConfig {
                                 }
                                 ("offlinelogstoragetimestamp",Some(value)) =>{
                                     let val: u32 = value.parse().unwrap();
-                                    //println!("offline_logstorage_timestamp:{val}");
                                     if val == 0 {
                                         conf.offline_logstorage_timestamp = false;
                                     }
@@ -576,17 +535,14 @@ impl DaemonConfig {
                                 }
                                 ("offlinelogstoragemaxcounter",Some(value)) => {
                                     let val: u32 = value.parse().unwrap();
-                                    //println!("offlinelogstoragemaxcounter:{val}");
                                         conf.offline_logstorage_max_counter = val;
                                 }
                                 ("offlinelogstoragecachesize",Some(value)) => {
                                     let val: u32 = value.parse().unwrap();
-                                    //println!("offline_logstorage_cache_size:{val}");
                                         conf.offline_logstorage_cache_size = val;
                                 }
                                 ("udpconnectionsetup",Some(value)) =>{
                                     let val: u32 = value.parse().unwrap();
-                                    //println!("udpconnection_setup:{val}");
                                     if val == 0 {
                                         conf.udpconnection_setup = false;
                                     }
@@ -596,7 +552,6 @@ impl DaemonConfig {
                                 }
                                 ("udpmulticastipaddress",Some(value)) =>{
                                     let val: String = value.parse().unwrap();
-                                    // println!("ecu_id: {val}");
                                    if is_valid_ip(val.clone())==true {
                                     conf.udpmulticast_ipaddress = String::from(val);
                                    }
@@ -606,24 +561,34 @@ impl DaemonConfig {
                                 }
                                 ("udpmulticastipport",Some(value)) => {
                                     let val: u32 = value.parse().unwrap();
-                                    //println!("udpmulticast_ipport:{val}");
                                         conf.udpmulticast_ipport = val;
                                 }
-                                ("dltuseipv6",Some(value)) => {
+                                ("bindaddress",Some(value)) => {
                                     let val:String = value.parse().unwrap();
                                     //println!("dlt_use_ipv6:{val}");
                                     if is_valid_ip(val.clone())==true {
                                         conf.dlt_use_ipv6 = false;
+                                        // taking as IPV4
+                                        let value_v4: Vec<&str> = val.split_terminator('.').collect();
+                                        println!("{:?}",value_v4);
+                                        // let val_v4: Result<Vec<u8>, _> = val.split(".").map(|x| x.parse()).collect();
+                                        // println!("{:?}",val_v4.clone());
+                                        
+                                        //convert "160.48.199.97" to 127,48,199,97 
+                                        let v4_0 = value_v4[0];
+                                        let v0=v4_0.as_ptr() as u8;
+                                        let v4_1 = value_v4[1];
+                                        let v1=v4_1.as_ptr() as u8;
+                                        let v4_2 = value_v4[2];
+                                        let v2=v4_2.as_ptr() as u8;
+                                        let v4_3 = value_v4[3];
+                                        let v3=v4_3.as_ptr() as u8;
+
+                                        IpAddr::V4(Ipv4Addr::new(v0, v1, v2, v3));
                                        }
                                        else {
                                            conf.dlt_use_ipv6 = true;
                                        }
-                                    // if Ipv4Addr::new(val)==true{
-                                    //     conf.dlt_use_ipv6 = false;
-                                    // }   
-                                    // else {
-                                    //     conf.dlt_use_ipv6 = true;
-                                    // }
                                 }
 
                                 //TODO: implement remaining configs
@@ -649,51 +614,51 @@ mod tests {
     #[test]
     fn basic() {
         let config = DaemonConfig::from_file("/home/devuser/dlt/dlt-daemon-rs/libdlt/testdata/daemon.conf").unwrap();
-        // assert!(config.verbose);
-        // assert!(config.daemonize);
-        // assert!(config.send_serial_header);
-        // assert!(config.send_context_registration);
+        assert!(config.verbose);
+        assert!(config.daemonize);
+        assert!(config.send_serial_header);
+        assert!(config.send_context_registration);
         assert_eq!(config.send_context_registration_option,SendContextRegistrationOption::Description);
-        // assert_eq!(config.send_message_time,false);
-        // assert_eq!(config.ecu_id,"ECU1");
-        // assert_eq!(config.shared_memory_size,100000);
-        // assert_eq!(config.persistance_storage_path, PathBuf::from("/tmp"));
-        // assert_eq!(config.logging_level,LogLevel::Info);
-        // assert_eq!(config.logging_mode,DaemonLoggingMode::Stdout);
-        // assert_eq!(config.timeout_on_send,Duration::from_secs(4));
-        // assert_eq!(config.ring_buffer_min_size,500000);
-        // assert_eq!(config.ring_buffer_max_size,10000000);
-        // assert_eq!(config.ring_buffer_step_size,500000);
-        // assert_eq!(config.daemon_fifo_size,65536);
-        // assert_eq!(config.context_log_level,DltLogLevel::DltLogInfo);
-        // assert_eq!(config.context_trace_status,false);
-        // assert!(config.force_context_loglevel_and_tracestatus);
-        // assert!(config.injection_mode);
-        // assert!(config.gateway_mode);
-        // assert_eq!(config.gateway_config_file, PathBuf::from("/etc/dlt_gateway.conf"));
-        // assert_eq!(config.daemon_fifo_group,PathBuf::from("/tmp/dlt"));
-        // assert_eq!(config.control_socket_path,PathBuf::from("/tmp/dlt-ctrl.sock"));
+        assert_eq!(config.send_message_time,false);
+        assert_eq!(config.ecu_id,"ECU1");
+        assert_eq!(config.shared_memory_size,100000);
+        assert_eq!(config.persistance_storage_path, PathBuf::from("/tmp"));
+        assert_eq!(config.logging_level,LogLevel::Info);
+        assert_eq!(config.logging_mode,DaemonLoggingMode::Stdout);
+        assert_eq!(config.timeout_on_send,Duration::from_secs(4));
+        assert_eq!(config.ring_buffer_min_size,500000);
+        assert_eq!(config.ring_buffer_max_size,10000000);
+        assert_eq!(config.ring_buffer_step_size,500000);
+        assert_eq!(config.daemon_fifo_size,65536);
+        assert_eq!(config.context_log_level,DltLogLevel::DltLogInfo);
+        assert_eq!(config.context_trace_status,false);
+        assert!(config.force_context_loglevel_and_tracestatus);
+        assert!(config.injection_mode);
+        assert!(config.gateway_mode);
+        assert_eq!(config.gateway_config_file, PathBuf::from("/etc/dlt_gateway.conf"));
+       // assert_eq!(config.daemon_fifo_group,PathBuf::from("/tmp/dlt"));
+        assert_eq!(config.control_socket_path,PathBuf::from("/tmp/dlt-ctrl.sock"));
         assert_eq!(config.offline_trace_directory,Some(PathBuf::from("/tmp")));
-        // assert_eq!(config.offline_trace_file_size,1000000);
-        // assert_eq!(config.offline_trace_max_size,4000000);
-        // assert_eq!(config.offline_trace_file_name,OfflineTraceFileName::OfflineTraceFileNameTimeStampBased);
-        // assert!(config.print_ascii);
-        // assert!(config.print_hex);
-        // assert!(config.print_headers_only);
+        assert_eq!(config.offline_trace_file_size,1000000);
+        assert_eq!(config.offline_trace_max_size,4000000);
+        assert_eq!(config.offline_trace_file_name,OfflineTraceFileName::OfflineTraceFileNameTimeStampBased);
+        assert!(config.print_ascii);
+        assert!(config.print_hex);
+        assert!(config.print_headers_only);
         assert_eq!(config.serial_port,Some(String::from("/dev/ttyS0")));
-        // assert_eq!(config.rs232_baudrate,115200);
-        // assert!(config.rs232_sync_serial_header);
-        // assert!(config.tcpsync_serial_header);
-        // assert_eq!(config.send_ecusoftware_version,0);
-        // assert_eq!(config.send_timezone,0);
-        // assert!(config.offline_logstorage_max_devices);
-        // assert_eq!(config.offline_logstorage_timestamp,false);
-        // assert_eq!(config.offline_logstorage_delimiter,"_");
-        // assert_eq!(config.offline_logstorage_max_counter,999);
-        // assert_eq!(config.offline_logstorage_cache_size,30000);
-        // assert!(config.udpconnection_setup);
-        // assert_eq!(config.udpmulticast_ipaddress,"225.0.0.37");
-        // assert_eq!(config.udpmulticast_ipport,3491);
-
+        assert_eq!(config.rs232_baudrate,115200);
+        assert!(config.rs232_sync_serial_header);
+        assert!(config.tcpsync_serial_header);
+        assert_eq!(config.send_ecusoftware_version,0);
+        assert_eq!(config.send_timezone,0);
+        assert!(config.offline_logstorage_max_devices);
+        assert_eq!(config.offline_logstorage_timestamp,false);
+        assert_eq!(config.offline_logstorage_delimiter,"_");
+        assert_eq!(config.offline_logstorage_max_counter,999);
+        assert_eq!(config.offline_logstorage_cache_size,30000);
+        assert!(config.udpconnection_setup);
+        assert_eq!(config.udpmulticast_ipaddress,"225.0.0.37");
+         assert_eq!(config.udpmulticast_ipport,3491);
+        assert_eq!(config.dlt_use_ipv6,false);
     }
 }
