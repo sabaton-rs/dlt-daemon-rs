@@ -104,7 +104,6 @@ pub struct DaemonConfig {
     pub udpmulticast_ipaddress: IpAddr,
     pub udpmulticast_ipport: u32,
     pub bind_address: IpAddr,
-    // TODO: Other config fields
 }
 
 impl Default for DaemonConfig {
@@ -504,7 +503,6 @@ impl DaemonConfig {
                                         conf.bind_address = ip;
                                     }
                                 }
-                                //TODO: implement remaining configs
                                 _ => {}
                             }
                         }
@@ -576,8 +574,10 @@ mod tests {
         assert!(config.rs232_sync_serial_header);
         assert!(config.tcpsync_serial_header);
         assert_eq!(config.send_ecusoftware_version, 0);
+        assert_eq!(config.path_to_ecusoftware_version, Some(PathBuf::from("<absolute-path-to-file>")));
         assert_eq!(config.send_timezone, 0);
         assert!(config.offline_logstorage_max_devices);
+        assert_eq!(config.offline_logstorage_dir_path,Some(PathBuf::from("/opt")));
         assert_eq!(config.offline_logstorage_timestamp, false);
         assert_eq!(config.offline_logstorage_delimiter, "_");
         assert_eq!(config.offline_logstorage_max_counter, 999);
