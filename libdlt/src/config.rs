@@ -78,7 +78,7 @@ pub struct DaemonConfig {
     pub gateway_mode: bool,
     pub gateway_config_file: PathBuf,
     //permission
-    pub daemon_fifo_group: PathBuf,
+    pub daemon_fifo_group: String,
     pub control_socket_path: PathBuf,
     pub offline_trace_directory: Option<PathBuf>,
     pub offline_trace_file_size: u32,
@@ -133,7 +133,7 @@ impl Default for DaemonConfig {
             injection_mode: true,
             gateway_mode: false,
             gateway_config_file: PathBuf::from("/etc/dlt_gateway.conf"),
-            daemon_fifo_group: PathBuf::from("/tmp/dlt"),
+            daemon_fifo_group: String::from("/tmp/dlt"),
             control_socket_path: PathBuf::from("/tmp/dlt-ctrl.sock"),
             offline_trace_directory: None,
             offline_trace_file_size: 1000000,
@@ -345,7 +345,7 @@ impl DaemonConfig {
                                     conf.gateway_config_file = val;
                                 }
                                 ("daemonfifogroup", Some(value)) => {
-                                    let val: PathBuf = value.parse().unwrap();
+                                    let val: String = value.parse().unwrap();
                                     conf.daemon_fifo_group = val;
                                 }
                                 ("controlsocketpath", Some(value)) => {
@@ -556,7 +556,7 @@ mod tests {
             config.gateway_config_file,
             PathBuf::from("/etc/dlt_gateway.conf")
         );
-        // // assert_eq!(config.daemon_fifo_group,PathBuf::from("/tmp/dlt"));
+        assert_eq!(config.daemon_fifo_group,String::from("dlt_user_apps_group"));
         assert_eq!(
             config.control_socket_path,
             PathBuf::from("/tmp/dlt-ctrl.sock")
