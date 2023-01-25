@@ -63,8 +63,8 @@ pub struct DaemonConfig {
     pub shared_memory_size: u32,
     pub persistance_storage_path: PathBuf,
     pub logging_mode: DaemonLoggingMode,
-    //LoggingFilename
     pub logging_level: LogLevel,
+    pub logging_filename: PathBuf,
     pub timeout_on_send: Duration,
     pub ring_buffer_min_size: u32,
     pub ring_buffer_max_size: u32,
@@ -121,6 +121,7 @@ impl Default for DaemonConfig {
             persistance_storage_path: PathBuf::from("/tmp"),
             logging_mode: DaemonLoggingMode::Stdout,
             logging_level: LogLevel::Error,
+            logging_filename: PathBuf::from("/tmp/dlt.log"),
             timeout_on_send: Duration::from_secs(4),
             ring_buffer_min_size: 500000,
             ring_buffer_max_size: 10000000,
@@ -240,7 +241,7 @@ impl DaemonConfig {
                                 }
                                 ("sharedmemorysize", Some(value)) => {
                                     let val: u32 = value.parse().unwrap();
-                                        conf.shared_memory_size = val;
+                                    conf.shared_memory_size = val;
                                 }
                                 ("persistancestoragepath", Some(value)) => {
                                     let val: PathBuf = value.parse().unwrap();
@@ -269,6 +270,10 @@ impl DaemonConfig {
                                         7 => LogLevel::Debug,
                                         _ => LogLevel::Info,
                                     };
+                                }
+                                ("loggingfilename", Some(value)) => {
+                                    let val: PathBuf = value.parse().unwrap();
+                                    conf.logging_filename = val;
                                 }
                                 ("timeoutonsend", Some(value)) => {
                                     let val: u64 = value.parse().unwrap();
@@ -536,6 +541,7 @@ mod tests {
         assert_eq!(config.persistance_storage_path, PathBuf::from("/tmp"));
         assert_eq!(config.logging_level, LogLevel::Info);
         assert_eq!(config.logging_mode, DaemonLoggingMode::Stdout);
+        assert_eq!(config.logging_filename, PathBuf::from("/tmp/dlt.log"));
         assert_eq!(config.timeout_on_send, Duration::from_secs(4));
         assert_eq!(config.ring_buffer_min_size, 500000);
         assert_eq!(config.ring_buffer_max_size, 10000000);
