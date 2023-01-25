@@ -1,11 +1,17 @@
-use std::{ffi::c_char, os::fd::RawFd, sync::{Mutex, Once, Arc}, mem::MaybeUninit, thread::JoinHandle};
-use async_std::channel::{self, Sender};
-use dlt_core::dlt::{Message, MessageConfig, PayloadContent, StorageHeader, DltTimeStamp};
-use libdlt::error::DltUserError;
 use crate::mainloop::mainloop;
+use async_std::channel::{self, Sender};
+use dlt_core::dlt::{DltTimeStamp, Message, MessageConfig, PayloadContent, StorageHeader};
+use libdlt::error::DltUserError;
+use std::{
+    ffi::c_char,
+    mem::MaybeUninit,
+    os::fd::RawFd,
+    sync::{Arc, Mutex, Once},
+    thread::JoinHandle,
+};
 
-pub (crate) mod log;
-pub (crate) mod mainloop;
+pub(crate) mod log;
+pub(crate) mod mainloop;
 
 enum LogState {
     Unknown,
@@ -20,7 +26,7 @@ impl Default for LogState {
 }
 
 pub struct DltUser {
-    inner : Arc<Mutex<DltUserInner>>,
+    inner: Arc<Mutex<DltUserInner>>,
 }
 
 impl DltUser {
@@ -33,19 +39,23 @@ impl DltUser {
     }
 
     // Create a new Context for logging
-    pub fn new_context(&self, context_id : String, description: String) -> Option<Context> {
-        self.inner.lock().unwrap().new_context(context_id, description)
+    pub fn new_context(&self, context_id: String, description: String) -> Option<Context> {
+        self.inner
+            .lock()
+            .unwrap()
+            .new_context(context_id, description)
     }
 }
 
-fn start_async_mainloop(dlt_user_inner : Arc<Mutex<DltUserInner>>) {
+fn start_async_mainloop(dlt_user_inner: Arc<Mutex<DltUserInner>>) {
     let dlt_user_inner_copy = dlt_user_inner.clone();
-    let main = std::thread::spawn(move|| {
-        async_std::task::block_on(mainloop(dlt_user_inner_copy))    
-    });
-    dlt_user_inner.lock().unwrap().mainloop_joinhandle.replace(main);
+    let main = std::thread::spawn(move || async_std::task::block_on(mainloop(dlt_user_inner_copy)));
+    dlt_user_inner
+        .lock()
+        .unwrap()
+        .mainloop_joinhandle
+        .replace(main);
 }
-
 
 /// Function to retrieve singleton DltUser
 pub fn dlt_user() -> &'static DltUser {
@@ -71,37 +81,40 @@ pub fn dlt_user() -> &'static DltUser {
 }
 
 pub struct DltUserInner {
-    ecu_id : Option<String>,
-    app_id : Option<String>,
+    ecu_id: Option<String>,
+    app_id: Option<String>,
     // if we are logging to file
-    logging_to_file : bool,
+    logging_to_file: bool,
     // overflow counter
-    overflow : Option<u32>,
-    application_description : Option<String>,
-    verbose_mode : bool,
-    use_extended_header_for_non_verbose : bool, /**< Use extended header for non verbose: 1 enabled, 0 disabled */
-    with_session_id : bool,                    /**< Send always session id: 1 enabled, 0 disabled */
-    with_timestamp : bool,                     /**< Send always timestamp: 1 enabled, 0 disabled */
-    with_ecu_id : bool,
-    
-    enable_local_print : bool,
-    local_print_mode : LocalPrintMode,
+    overflow: Option<u32>,
+    application_description: Option<String>,
+    verbose_mode: bool,
+    use_extended_header_for_non_verbose: bool,
+    /**< Use extended header for non verbose: 1 enabled, 0 disabled */
+    with_session_id: bool,
+    /**< Send always session id: 1 enabled, 0 disabled */
+    with_timestamp: bool,
+    /**< Send always timestamp: 1 enabled, 0 disabled */
+    with_ecu_id: bool,
 
-    log_state : LogState,
-    contexts : Vec<Context>,
+    enable_local_print: bool,
+    local_print_mode: LocalPrintMode,
 
-    initial_log_levels : Vec<InitialLogLevel>,
+    log_state: LogState,
+    contexts: Vec<Context>,
 
-    receiver : channel::Receiver<Message>,
-    sender : channel::Sender<Message>,
-    mainloop_joinhandle : Option<JoinHandle<()>>,
+    initial_log_levels: Vec<InitialLogLevel>,
+
+    receiver: channel::Receiver<Message>,
+    sender: channel::Sender<Message>,
+    mainloop_joinhandle: Option<JoinHandle<()>>,
 }
 
 impl DltUserInner {
-    pub fn new() -> Result<Self,DltUserError> {
+    pub fn new() -> Result<Self, DltUserError> {
         //let ecu_id = [ecu_id[0] as u8,ecu_id[1] as u8, ecu_id[2] as u8, ecu_id[3] as u8];
         //let app_id = [app_id[0] as u8,app_id[1] as u8, app_id[2] as u8, app_id[3] as u8];
-        let (sender,receiver) = channel::bounded::<Message>(100);
+        let (sender, receiver) = channel::bounded::<Message>(100);
         let dlt_user = DltUserInner {
             ecu_id: None,
             app_id: None,
@@ -110,7 +123,7 @@ impl DltUserInner {
             application_description: None,
             verbose_mode: true,
             use_extended_header_for_non_verbose: true,
-            with_session_id:true,
+            with_session_id: true,
             with_timestamp: true,
             with_ecu_id: true,
             enable_local_print: false,
@@ -120,22 +133,23 @@ impl DltUserInner {
             initial_log_levels: Vec::new(),
             sender,
             receiver,
-            mainloop_joinhandle :None,
+            mainloop_joinhandle: None,
         };
 
         Ok(dlt_user)
     }
 
-    fn new_context(&self, context_id: String, description : String) -> Option<Context> {
-        // TODO: Check defaults that may be set via configuration or environment 
+    fn new_context(&self, context_id: String, description: String) -> Option<Context> {
+        // TODO: Check defaults that may be set via configuration or environment
         // variables
-        Some(Context { 
-            context_id, 
-            log_level: 0, 
-            trace_status: 1, 
-            message_counter: 0, 
-            description, 
-            sender : self.sender.clone() })
+        Some(Context {
+            context_id,
+            log_level: 0,
+            trace_status: 1,
+            message_counter: 0,
+            description,
+            sender: self.sender.clone(),
+        })
     }
 }
 
@@ -152,32 +166,31 @@ impl Default for LocalPrintMode {
 }
 
 struct InitialLogLevel {
-    app_id : u32,
-    context_id : u32,
-    log_level : i8,
+    app_id: u32,
+    context_id: u32,
+    log_level: i8,
 }
 
 pub struct Context {
-    context_id : String,
-    log_level : i8,
-    trace_status : i8,
-    message_counter : u8,
-    description : String,
-    sender : Sender<Message>,
+    context_id: String,
+    log_level: i8,
+    trace_status: i8,
+    message_counter: u8,
+    description: String,
+    sender: Sender<Message>,
 }
 
 struct MessageContext {
-    message : Message,
+    message: Message,
 }
 
 impl MessageContext {
-    pub fn new(ecu_id:String, verbose : bool) -> Result<Self,DltUserError> {
-
+    pub fn new(ecu_id: String, verbose: bool) -> Result<Self, DltUserError> {
         let conf = MessageConfig {
             version: 1,
             counter: 0,
             endianness: dlt_core::dlt::Endianness::Big,
-            ecu_id : None,
+            ecu_id: None,
             session_id: None,
             timestamp: None,
             payload: if verbose {
@@ -199,10 +212,7 @@ impl MessageContext {
     pub fn as_bytes(&self) -> Vec<u8> {
         self.message.as_bytes()
     }
-
-
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -212,11 +222,11 @@ mod tests {
 
     #[test]
     fn basic() {
-       let dlt_user = dlt_user();
-       dlt_user.set_ecu_id("ECU1".to_string());
-       dlt_user.set_app_info("APP1".to_string(), "Application description".to_string());
-       // This sleep is to prevent the test from exiting before the mainloop task has
-       // started
-       std::thread::sleep(Duration::from_secs(2));
+        let dlt_user = dlt_user();
+        dlt_user.set_ecu_id("ECU1".to_string());
+        dlt_user.set_app_info("APP1".to_string(), "Application description".to_string());
+        // This sleep is to prevent the test from exiting before the mainloop task has
+        // started
+        std::thread::sleep(Duration::from_secs(2));
     }
 }

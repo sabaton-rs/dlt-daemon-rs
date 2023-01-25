@@ -11,5 +11,5 @@ pub enum DltError {
     #[error("Config file not found")]
     IoError(#[from] std::io::Error),
     #[error("Config file error")]
-    ConfigFileError(String)
+    ConfigFileError(String),
 }
