@@ -577,6 +577,7 @@ mod tests {
         assert_eq!(config.path_to_ecusoftware_version, Some(PathBuf::from("<absolute-path-to-file>")));
         assert_eq!(config.send_timezone, 0);
         assert!(config.offline_logstorage_max_devices);
+        assert_eq!(config.offline_logstorage_dir_path,Some(PathBuf::from("/opt")));
         assert_eq!(config.offline_logstorage_timestamp, false);
         assert_eq!(config.offline_logstorage_delimiter, "_");
         assert_eq!(config.offline_logstorage_max_counter, 999);
