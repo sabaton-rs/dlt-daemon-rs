@@ -22,14 +22,11 @@ static IWRITE: u32 = 0200; //0200  write by user
 static IRGRP: u32 = 0400 >> 3; //0400>>3 read by group
 static IWGRP: u32 = 0200 >> 3; //0200>>3 write by group
 
-pub(crate) fn fifo_connection(dltuserinner: &mut DltUserInner) -> Result<DltUserInner, Error> {
-    let mut dltuserinner = DltUserInner::new(CONFIG).unwrap();
-
+pub(crate) fn fifo_connection(dltuserinner: &mut DltUserInner) -> Result<(), Error> {
     let mut log_path = LOG_PATH.to_string();
     let mut user_path = USER_PATH.to_string();
     let process_id = process::id().to_string();
     user_path.push_str(&process_id);
-    println!("{}", user_path);
 
     let mode = 0o3777; //read write and execute for owner and for group
 
@@ -63,7 +60,7 @@ pub(crate) fn fifo_connection(dltuserinner: &mut DltUserInner) -> Result<DltUser
     dltuserinner.dlt_user_handle = Some(user_path_handle.into());
     dltuserinner.dlt_log_handle = Some(log_path_handle.into());
 
-    Ok(dltuserinner)
+    Ok(())
 }
 
 mod tests {
@@ -82,8 +79,8 @@ mod tests {
     #[test]
     fn basicee() {
         let mut dltuserinner = DltUserInner::new(CONFIG).unwrap();
-        let res = fifo_connection(&mut dltuserinner);
-        let mut user_handle = res.unwrap().dlt_user_handle.unwrap();
+        let res = fifo_connection(&mut dltuserinner).unwrap();
+        let mut user_handle = dltuserinner.dlt_user_handle.unwrap();
         user_handle.write(b"hello world");
         thread::sleep(time::Duration::from_secs(3));
 

@@ -36,7 +36,7 @@ impl From<UserMessageType> for u32 {
         }
     }
 }
-
+#[derive(Clone, Copy, Debug)]
 #[repr(C, packed)]
 pub struct UserHeader {
     pattern: [u8; 4],
@@ -64,7 +64,7 @@ pub mod user_control_message {
         }
         result
     }
-
+    #[derive(Clone, Copy, Debug)]
     #[repr(C, packed)]
     pub(crate) struct RegisterApplication {
         pub app_id: [u8; 4],
@@ -76,12 +76,11 @@ pub mod user_control_message {
             RegisterApplication {
                 app_id: opt_string_to_u8_4(dltuserinner.app_id.clone()),
                 pid: process::id(),
-                description_length: dltuserinner.application_description.clone().unwrap().len()
-                    as u32,
+                description_length: dltuserinner.application_description.len() as u32,
             }
         }
     }
-
+    #[repr(C, packed)]
     pub struct UnregisterApplication {
         app_id: [u8; 4],
         pid: u32,
@@ -90,6 +89,45 @@ pub mod user_control_message {
         fn new(dltuserinner: &DltUserInner) -> Self {
             UnregisterApplication {
                 app_id: opt_string_to_u8_4(dltuserinner.app_id.clone()),
+                pid: process::id(),
+            }
+        }
+    }
+    #[repr(C, packed)]
+    pub struct RegisterContext {
+        app_id: [u8; 4],
+        context_id: [u8; 4],
+        log_level_pos: i32,
+        log_level: i32,
+        trace_status: i8,
+        pid: u32,
+        description_length: u32,
+    }
+    impl RegisterContext {
+        fn new(dltuserinner: &DltUserInner) -> Self {
+            RegisterContext {
+                app_id: opt_string_to_u8_4(dltuserinner.app_id.clone()),
+                context_id: todo!(),
+                log_level_pos: 0,
+                log_level: 0,
+                trace_status: todo!(),
+                pid: process::id(),
+                description_length: todo!(),
+            }
+        }
+    }
+
+    #[repr(C, packed)]
+    pub struct UnRegisterContext {
+        app_id: [u8; 4],
+        context_id: [u8; 4],
+        pid: u32,
+    }
+    impl UnRegisterContext {
+        fn new(dltuserinner: &DltUserInner) -> Self {
+            UnRegisterContext {
+                app_id: opt_string_to_u8_4(dltuserinner.app_id.clone()),
+                context_id: todo!(),
                 pid: process::id(),
             }
         }

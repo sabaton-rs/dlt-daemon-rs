@@ -1,6 +1,7 @@
 use crate::{fifo::fifo_connection, mainloop::mainloop};
 use async_std::channel::{self, Sender};
 use dlt_core::dlt::{DltTimeStamp, Message, MessageConfig, PayloadContent, StorageHeader};
+use libc::EILSEQ;
 use libdlt::{
     config::DaemonConfig,
     error::{DltError, DltUserError},
@@ -33,6 +34,24 @@ impl Default for LogState {
     }
 }
 
+pub(crate) fn dlt_user_log_send_register(
+    inner: &mut DltUserInner,
+    user_header: &UserHeader,
+    register_application: &RegisterApplication,
+) -> Result<(), Error> {
+    /* writing into log file */
+
+    let bufs = [
+        IoSlice::new(any_as_u8_slice(user_header)),
+        IoSlice::new(any_as_u8_slice(register_application)),
+        IoSlice::new(inner.application_description.as_bytes()),
+    ];
+    let result =inner.dlt_log_handle.as_ref().unwrap().write_vectored(&bufs);
+    match result {
+        Ok(_) => Ok(()),
+        Err(error) => Err(error),
+    }
+}
 pub struct DltUser {
     inner: Arc<Mutex<DltUserInner>>,
 }
@@ -51,7 +70,7 @@ impl DltUser {
     }
     pub fn set_app_info(&self, app_id: String, description: String) {
         self.inner.lock().unwrap().app_id = Some(app_id);
-        self.inner.lock().unwrap().application_description = Some(description);
+        self.inner.lock().unwrap().application_description = description;
     }
 
     // Create a new Context for logging
@@ -72,41 +91,24 @@ impl DltUser {
         }
     }
 
-    pub fn dlt_user_log_send_register_application() -> Result<(), Error> {
-        /* writing into log file */
-
-        let user_header = UserHeader::new(UserMessageType::RegisterApplication);
-        let register_application = RegisterApplication::new(&dlt_user().inner.lock().unwrap());
-
-        let res = fifo_connection(&mut dlt_user().inner.lock().unwrap());
-        let mut log_handle = res.unwrap().dlt_log_handle.unwrap();
-
-        let desc = dlt_user()
-            .inner
-            .lock()
-            .unwrap()
-            .application_description
-            .clone();
-        let string_bytes = desc.map_or(String::new(), |s| s);
-
-        let bufs = [
-            IoSlice::new(any_as_u8_slice(&user_header)),
-            IoSlice::new(any_as_u8_slice(&register_application)),
-            IoSlice::new(string_bytes.as_bytes()),
-        ];
-        let written_length = log_handle.write_vectored(&bufs)?;
-
-        Ok(())
-    }
-
-    pub fn dlt_register_app(&self, app_id: &str, description: &str) {
+    pub fn dlt_register_app(&self, app_id: &str, description: &str) -> Result<(), Error> {
         let dlt_package_minor_version = 18;
         let dlt_package_major_version = 2;
 
         self.dlt_check_library_version(dlt_package_minor_version, dlt_package_major_version);
 
         self.set_app_info(app_id.to_owned(), description.to_owned());
-        Self::dlt_user_log_send_register_application();
+
+        if let Ok(mut inner) = self.inner.lock() {
+            let user_header = UserHeader::new(UserMessageType::RegisterApplication);
+            let register_application = RegisterApplication::new(&inner);
+
+            let res = fifo_connection(&mut inner);
+
+            let ret = dlt_user_log_send_register(&mut inner, &user_header, &register_application);
+        }
+
+        Ok(())
     }
 }
 
@@ -180,7 +182,7 @@ pub struct DltUserInner {
     logging_to_file: bool,
     // overflow counter
     overflow: Option<u32>,
-    application_description: Option<String>,
+    application_description: String,
     verbose_mode: bool,
     use_extended_header_for_non_verbose: bool,
     /**< Use extended header for non verbose: 1 enabled, 0 disabled */
@@ -214,7 +216,7 @@ impl DltUserInner {
             dlt_user_handle: None,
             logging_to_file: false,
             overflow: None,
-            application_description: None,
+            application_description: String::new(),
             verbose_mode: true,
             use_extended_header_for_non_verbose: true,
             with_session_id: true,
