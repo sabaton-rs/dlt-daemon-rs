@@ -15,9 +15,8 @@ pub enum DltReturnValue {
     DLT_RETURN_PIPE_ERROR = -2,
     DLT_RETURN_ERROR = -1,
     DLT_RETURN_OK = 0,
-    DLT_RETURN_TRUE = 1
-} 
-
+    DLT_RETURN_TRUE = 1,
+}
 
 #[no_mangle]
 pub extern "C" fn dlt_init() -> DltReturnValue {

@@ -5,7 +5,7 @@ use std::{
 
 use async_std::fs::OpenOptions;
 
-use crate::{DltUser, DltUserInner};
+use crate::DltUserInner;
 use async_std::io::prelude::WriteExt;
 
 pub(crate) async fn mainloop(dlt_user: Arc<Mutex<DltUserInner>>) {
