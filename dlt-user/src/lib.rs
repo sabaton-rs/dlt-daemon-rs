@@ -74,7 +74,7 @@ impl DltUser {
     }
 
     // Create a new Context for logging
-    pub fn new_context(&self, context_id: String, description: String) -> Option<Context> {
+    pub(crate) fn new_context(&self, context_id: &str, description: &str) -> Option<Context> {
         self.inner
             .lock()
             .unwrap()
@@ -110,6 +110,11 @@ impl DltUser {
 
         Ok(())
     }
+
+    pub fn register_context(&self, context_id: &str, description: &str) -> Result<Context,DltError>  {
+        self.new_context(context_id, description).ok_or(DltError::DltReturnWrongParameter)
+    }
+
 }
 
 pub fn dlt_env_extract_ll_set(
@@ -133,6 +138,8 @@ pub fn dlt_env_extract_ll_set(
         initial_log_levels[0].log_level,
     );
 }
+
+
 
 fn start_async_mainloop(dlt_user_inner: Arc<Mutex<DltUserInner>>) {
     let dlt_user_inner_copy = dlt_user_inner.clone();
@@ -196,7 +203,7 @@ pub struct DltUserInner {
     log_buf_len: u32,
     log_msg_buf_max_size: u32,
     log_state: LogState,
-    contexts: Vec<Context>,
+    contexts: Vec<ContextStore>,
     initial_log_levels: Vec<InitialLogLevel>,
     receiver: channel::Receiver<Message>,
     sender: channel::Sender<Message>,
@@ -237,17 +244,44 @@ impl DltUserInner {
         Ok(dlt_user)
     }
 
-    fn new_context(&self, context_id: String, description: String) -> Option<Context> {
+    fn new_context(&mut self, context_id: &str, description: &str) -> Option<Context> {
+       
+        if !context_id.is_ascii() {
+            return None
+        }
+
+        if !description.is_ascii() {
+            return None
+        }
+
+        let mut context_id_bytes = [0u8;4];
+        
+        for (i,value) in context_id.as_bytes().iter().enumerate().take(4) {
+            context_id_bytes[i] = *value;
+        }
+
         // TODO: Check defaults that may be set via configuration or environment
         // variables
-        Some(Context {
-            context_id,
+
+        let inner = 
+        
+        ContextInner {
+            context_id : context_id_bytes,
             log_level: 0,
             trace_status: 1,
             message_counter: 0,
-            description,
+            description : description.to_owned(),
             sender: self.sender.clone(),
-        })
+        };
+        let context_store = ContextStore{ inner: Arc::new(inner) };
+        // bail out if this context is already created
+        if self.contexts.contains(&context_store) {
+            println!("This context already exists");
+            return None
+        }
+        
+        self.contexts.push(context_store.clone());
+        Some(Context { store: context_store } )
     }
 }
 
@@ -442,13 +476,30 @@ pub struct InitialLogLevel {
     log_level: i8,
 }
 
+/// The opaque context structure that is seen by the user
 pub struct Context {
-    context_id: String,
+    store : ContextStore,
+}
+
+#[derive(Clone,PartialEq)]
+pub(crate) struct ContextStore {
+    inner: Arc<ContextInner>,
+}
+
+#[derive(Clone)]
+struct ContextInner {
+    context_id: [u8;4],
     log_level: i8,
     trace_status: i8,
     message_counter: u8,
     description: String,
     sender: Sender<Message>,
+}
+
+impl PartialEq for ContextInner {
+    fn eq(&self, other: &Self) -> bool {
+        self.context_id == other.context_id
+    }
 }
 
 enum DLT_LOG {
