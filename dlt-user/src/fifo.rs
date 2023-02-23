@@ -22,8 +22,8 @@ static IWRITE: u32 = 0200; //0200  write by user
 static IRGRP: u32 = 0400 >> 3; //0400>>3 read by group
 static IWGRP: u32 = 0200 >> 3; //0200>>3 write by group
 
-pub(crate) fn fifo_connection(dltuserinner: &mut DltUserInner) -> Result<(), Error> {
-    let mut log_path = LOG_PATH.to_string();
+
+pub(crate) fn incoming_fifo()->Result<File,Error> {
     let mut user_path = USER_PATH.to_string();
     let process_id = process::id().to_string();
     user_path.push_str(&process_id);
@@ -37,6 +37,8 @@ pub(crate) fn fifo_connection(dltuserinner: &mut DltUserInner) -> Result<(), Err
     fs::set_permissions(DIR, perms)?;
 
     unsafe { libc::unlink(user_path.as_ptr() as *const i8) };
+    //fs::remove_file(&user_path)?;
+
 
     let filename = CString::new(user_path.clone()).unwrap();
 
@@ -50,18 +52,25 @@ pub(crate) fn fifo_connection(dltuserinner: &mut DltUserInner) -> Result<(), Err
         .write(true)
         .custom_flags(libc::O_NONBLOCK | libc::O_CLOEXEC)
         .open(user_path)?;
+
+    Ok(user_path_handle)
+}
+
+
+
+pub(crate) fn outgoing_fifo()->Result<File,Error> {
+    let mut log_path = LOG_PATH.to_string();
+
     let mut log_path_handle = fs::OpenOptions::new()
         .read(true)
         .write(true)
         .custom_flags(libc::O_WRONLY | libc::O_NONBLOCK | libc::O_CLOEXEC)
         .open(log_path)?;
 
-    //add path handles to dltuserinner
-    dltuserinner.dlt_user_handle = Some(user_path_handle.into());
-    dltuserinner.dlt_log_handle = Some(log_path_handle.into());
-
-    Ok(())
+    Ok(log_path_handle)
 }
+
+
 
 mod tests {
     use std::time::Duration;
@@ -70,16 +79,32 @@ mod tests {
 
     use super::*;
 
+
     #[test]
-    fn b() {
+    fn incoming_test() {
         let mut dltuserinner = DltUserInner::new(CONFIG).unwrap();
-        fifo_connection(&mut dltuserinner);
+        let incoming = incoming_fifo().unwrap();
+        dltuserinner.dlt_user_handle = Some(incoming);
+        println!("{:?}",dltuserinner.dlt_user_handle);
+
     }
 
     #[test]
-    fn basicee() {
+    fn outgoing_test() {
+        let mut dltuserinner = DltUserInner::new(CONFIG).unwrap();       
+        let incoming = outgoing_fifo().unwrap();
+        dltuserinner.dlt_log_handle = Some(incoming);
+        println!("{:?}",dltuserinner.dlt_log_handle);
+
+    }
+
+    #[test]
+    fn writing_and_reading_from_incoming_test() {
+
         let mut dltuserinner = DltUserInner::new(CONFIG).unwrap();
-        let res = fifo_connection(&mut dltuserinner).unwrap();
+        let incoming = incoming_fifo().unwrap();
+        dltuserinner.dlt_user_handle = Some(incoming);
+
         let mut user_handle = dltuserinner.dlt_user_handle.unwrap();
         user_handle.write(b"hello world");
         thread::sleep(time::Duration::from_secs(3));

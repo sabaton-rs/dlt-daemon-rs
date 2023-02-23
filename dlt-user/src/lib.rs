@@ -1,4 +1,4 @@
-use crate::{fifo::fifo_connection, mainloop::mainloop};
+use crate::{mainloop::mainloop};
 use async_std::channel::{self, Sender};
 use dlt_core::dlt::{DltTimeStamp, Message, MessageConfig, PayloadContent, StorageHeader};
 use libc::EILSEQ;
@@ -7,7 +7,7 @@ use libdlt::{
     error::{DltError, DltUserError},
 };
 use ringbuf::HeapRb;
-use std::io::Error;
+use std::{io::Error, fs};
 use std::{
     env,
     fs::File,
@@ -104,7 +104,7 @@ impl DltUser {
             let user_header = UserHeader::new(UserMessageType::RegisterApplication);
             let register_application = RegisterApplication::new(&inner);
 
-            let res = fifo_connection(&mut inner);
+            //let res = fifo_connection(&mut inner);
 
             let ret = dlt_user_log_send_register(&mut inner, &user_header, &register_application);
         }
@@ -211,6 +211,14 @@ pub struct DltUserInner {
     mainloop_joinhandle: Option<JoinHandle<()>>,
     rb : HeapRb<u8>,
 }
+
+// impl Drop for DltUserInner{
+//     fn drop(&mut self) {
+//         // let file_path = self.dlt_user_handle.unwrap().;
+//         // fs::remove_file(self.dlt_log_handle.unwrap().path());
+//         // unsafe { libc::unlink(user_path.as_ptr() as *const i8) };
+//     }
+// }
 
 impl DltUserInner {
     pub fn new(config_path: &str) -> Result<Self, DltUserError> {
