@@ -10,6 +10,27 @@ use async_std::io::prelude::WriteExt;
 
 pub(crate) async fn mainloop(dlt_user: Arc<Mutex<DltUserInner>>) {
     println!("Mainloop processing started");
+
+    // This is the task for receiving messages from the server
+    async_std::task::spawn(async move {
+        'incoming_outer: loop {
+            //let temp_path = temp
+            println!("Incoming task started");
+
+            // TODO: Open the incoming FIFO here and loop over it 
+            // asynchronously
+
+
+
+            async_std::task::sleep(Duration::from_millis(100)).await;
+            // something seriously wrong. Go back to outer loop and
+            // try to connect again
+            continue 'incoming_outer;
+        }
+
+    });
+
+
     let rx = dlt_user.lock().unwrap().receiver.clone();
     'outer: loop {
         // attempt to connect to the daemon

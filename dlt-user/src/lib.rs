@@ -6,6 +6,7 @@ use libdlt::{
     config::DaemonConfig,
     error::{DltError, DltUserError},
 };
+use ringbuf::HeapRb;
 use std::io::Error;
 use std::{
     env,
@@ -208,6 +209,7 @@ pub struct DltUserInner {
     receiver: channel::Receiver<Message>,
     sender: channel::Sender<Message>,
     mainloop_joinhandle: Option<JoinHandle<()>>,
+    rb : HeapRb<u8>,
 }
 
 impl DltUserInner {
@@ -215,10 +217,13 @@ impl DltUserInner {
         //let ecu_id = [ecu_id[0] as u8,ecu_id[1] as u8, ecu_id[2] as u8, ecu_id[3] as u8];
         //let app_id = [app_id[0] as u8,app_id[1] as u8, app_id[2] as u8, app_id[3] as u8];
         let (sender, receiver) = channel::bounded::<Message>(100);
+        let config = DaemonConfig::from_file(config_path).unwrap();
+        let rb_starting_size = config.ring_buffer_min_size;
+
         let dlt_user = DltUserInner {
             ecu_id: None,
             app_id: None,
-            config: DaemonConfig::from_file(config_path).unwrap(),
+            config, 
             dlt_log_handle: None,
             dlt_user_handle: None,
             logging_to_file: false,
@@ -239,6 +244,7 @@ impl DltUserInner {
             mainloop_joinhandle: None,
             log_buf_len: 1390,           //maximum size of each user buffer
             log_msg_buf_max_size: 65535, //Maximum log msg size as per autosar standard
+            rb : HeapRb::new(rb_starting_size as usize),
         };
 
         Ok(dlt_user)
