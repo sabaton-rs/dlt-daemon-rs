@@ -220,9 +220,8 @@ pub struct DltUserInner {
 impl Drop for DltUserInner {
     fn drop(&mut self) {
         if let Some(_path) = self.user_path.as_ref() {
-            if let Ok(()) = fs::remove_file(self.user_path.as_ref().unwrap()) {};
-        } else {
-        }
+            if let Ok(()) = fs::remove_file(_path) {};
+        } else {}
     }
 }
 

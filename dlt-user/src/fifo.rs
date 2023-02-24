@@ -1,7 +1,7 @@
 use crate::DltUserInner;
 use dlt_core::dlt::Error;
 
-use libc::{self, c_void, mkdir};
+use libc::{self};
 use std::ffi::CString;
 use std::fs::File;
 
@@ -44,7 +44,6 @@ pub(crate) fn incoming_fifo() -> Result<(File, PathBuf), Error> {
     fs::set_permissions(DIR, perms)?;
 
     unsafe { libc::unlink(user_path.as_ptr() as *const i8) };
-    //fs::remove_file(&user_path)?;
 
     let filename = CString::new(user_path.clone()).unwrap();
 
@@ -58,7 +57,6 @@ pub(crate) fn incoming_fifo() -> Result<(File, PathBuf), Error> {
         .write(true)
         .custom_flags(libc::O_NONBLOCK | libc::O_CLOEXEC)
         .open(user_path.clone())?;
-    thread::sleep(time::Duration::from_secs(10));
 
     Ok((user_path_handle, path))
 }
@@ -84,9 +82,9 @@ mod tests {
     fn incoming_test() {
         let mut dltuserinner = DltUserInner::new(CONFIG).unwrap();
         let (incoming, handle) = incoming_fifo().unwrap();
+        //thread::sleep(time::Duration::from_secs(10));
         dltuserinner.dlt_user_handle = Some(incoming);
         dltuserinner.user_path = Some(handle);
-        // println!("{:?}",dltuserinner.dlt_user_handle);
     }
 
     #[test]
