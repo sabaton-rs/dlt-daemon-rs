@@ -1,13 +1,13 @@
-use crate::{mainloop::mainloop};
+use crate::mainloop::mainloop;
 use async_std::channel::{self, Sender};
 use dlt_core::dlt::{DltTimeStamp, Message, MessageConfig, PayloadContent, StorageHeader};
-use libc::EILSEQ;
+use fifo::outgoing_fifo;
 use libdlt::{
     config::DaemonConfig,
     error::{DltError, DltUserError},
 };
 use ringbuf::HeapRb;
-use std::{io::Error, fs};
+use std::path::PathBuf;
 use std::{
     env,
     fs::File,
@@ -17,6 +17,7 @@ use std::{
     thread::JoinHandle,
     u8,
 };
+use std::{fs, io::Error};
 use user_header::{user_control_message::RegisterApplication, UserHeader, UserMessageType};
 
 pub(crate) mod fifo;
@@ -47,7 +48,7 @@ pub(crate) fn dlt_user_log_send_register(
         IoSlice::new(any_as_u8_slice(register_application)),
         IoSlice::new(inner.application_description.as_bytes()),
     ];
-    let result =inner.dlt_log_handle.as_ref().unwrap().write_vectored(&bufs);
+    let result = inner.dlt_log_handle.as_ref().unwrap().write_vectored(&bufs);
     match result {
         Ok(_) => Ok(()),
         Err(error) => Err(error),
@@ -104,7 +105,8 @@ impl DltUser {
             let user_header = UserHeader::new(UserMessageType::RegisterApplication);
             let register_application = RegisterApplication::new(&inner);
 
-            //let res = fifo_connection(&mut inner);
+            inner.dlt_log_handle = Some(outgoing_fifo().unwrap());
+            println!("{:?}", inner.dlt_log_handle);
 
             let ret = dlt_user_log_send_register(&mut inner, &user_header, &register_application);
         }
@@ -112,10 +114,14 @@ impl DltUser {
         Ok(())
     }
 
-    pub fn register_context(&self, context_id: &str, description: &str) -> Result<Context,DltError>  {
-        self.new_context(context_id, description).ok_or(DltError::DltReturnWrongParameter)
+    pub fn register_context(
+        &self,
+        context_id: &str,
+        description: &str,
+    ) -> Result<Context, DltError> {
+        self.new_context(context_id, description)
+            .ok_or(DltError::DltReturnWrongParameter)
     }
-
 }
 
 pub fn dlt_env_extract_ll_set(
@@ -127,8 +133,8 @@ pub fn dlt_env_extract_ll_set(
     let context_id: u32 = value[1].parse().unwrap();
     let ll: i8 = value[2].parse().unwrap();
     let initial_log_level = InitialLogLevel {
-        app_id: app_id,
-        context_id: context_id,
+        app_id,
+        context_id,
         log_level: ll,
     };
     initial_log_levels.push(initial_log_level);
@@ -139,8 +145,6 @@ pub fn dlt_env_extract_ll_set(
         initial_log_levels[0].log_level,
     );
 }
-
-
 
 fn start_async_mainloop(dlt_user_inner: Arc<Mutex<DltUserInner>>) {
     let dlt_user_inner_copy = dlt_user_inner.clone();
@@ -209,16 +213,18 @@ pub struct DltUserInner {
     receiver: channel::Receiver<Message>,
     sender: channel::Sender<Message>,
     mainloop_joinhandle: Option<JoinHandle<()>>,
-    rb : HeapRb<u8>,
+    rb: HeapRb<u8>,
+    user_path: Option<PathBuf>,
 }
 
-// impl Drop for DltUserInner{
-//     fn drop(&mut self) {
-//         // let file_path = self.dlt_user_handle.unwrap().;
-//         // fs::remove_file(self.dlt_log_handle.unwrap().path());
-//         // unsafe { libc::unlink(user_path.as_ptr() as *const i8) };
-//     }
-// }
+impl Drop for DltUserInner {
+    fn drop(&mut self) {
+        if let Some(_path) = self.user_path.as_ref() {
+            if let Ok(()) = fs::remove_file(self.user_path.as_ref().unwrap()) {};
+        } else {
+        }
+    }
+}
 
 impl DltUserInner {
     pub fn new(config_path: &str) -> Result<Self, DltUserError> {
@@ -231,7 +237,7 @@ impl DltUserInner {
         let dlt_user = DltUserInner {
             ecu_id: None,
             app_id: None,
-            config, 
+            config,
             dlt_log_handle: None,
             dlt_user_handle: None,
             logging_to_file: false,
@@ -252,50 +258,52 @@ impl DltUserInner {
             mainloop_joinhandle: None,
             log_buf_len: 1390,           //maximum size of each user buffer
             log_msg_buf_max_size: 65535, //Maximum log msg size as per autosar standard
-            rb : HeapRb::new(rb_starting_size as usize),
+            rb: HeapRb::new(rb_starting_size as usize),
+            user_path: None,
         };
 
         Ok(dlt_user)
     }
 
     fn new_context(&mut self, context_id: &str, description: &str) -> Option<Context> {
-       
         if !context_id.is_ascii() {
-            return None
+            return None;
         }
 
         if !description.is_ascii() {
-            return None
+            return None;
         }
 
-        let mut context_id_bytes = [0u8;4];
-        
-        for (i,value) in context_id.as_bytes().iter().enumerate().take(4) {
+        let mut context_id_bytes = [0u8; 4];
+
+        for (i, value) in context_id.as_bytes().iter().enumerate().take(4) {
             context_id_bytes[i] = *value;
         }
 
         // TODO: Check defaults that may be set via configuration or environment
         // variables
 
-        let inner = 
-        
-        ContextInner {
-            context_id : context_id_bytes,
+        let inner = ContextInner {
+            context_id: context_id_bytes,
             log_level: 0,
             trace_status: 1,
             message_counter: 0,
-            description : description.to_owned(),
+            description: description.to_owned(),
             sender: self.sender.clone(),
         };
-        let context_store = ContextStore{ inner: Arc::new(inner) };
+        let context_store = ContextStore {
+            inner: Arc::new(inner),
+        };
         // bail out if this context is already created
         if self.contexts.contains(&context_store) {
             println!("This context already exists");
-            return None
+            return None;
         }
-        
+
         self.contexts.push(context_store.clone());
-        Some(Context { store: context_store } )
+        Some(Context {
+            store: context_store,
+        })
     }
 }
 
@@ -492,17 +500,17 @@ pub struct InitialLogLevel {
 
 /// The opaque context structure that is seen by the user
 pub struct Context {
-    store : ContextStore,
+    store: ContextStore,
 }
 
-#[derive(Clone,PartialEq)]
+#[derive(Clone, PartialEq)]
 pub(crate) struct ContextStore {
     inner: Arc<ContextInner>,
 }
 
 #[derive(Clone)]
 struct ContextInner {
-    context_id: [u8;4],
+    context_id: [u8; 4],
     log_level: i8,
     trace_status: i8,
     message_counter: u8,
@@ -516,12 +524,12 @@ impl PartialEq for ContextInner {
     }
 }
 
-enum DLT_LOG {
-    DLT_LOG_TO_CONSOLE = 0,
-    DLT_LOG_TO_SYSLOG = 1,
-    DLT_LOG_TO_FILE = 2,
-    DLT_LOG_TO_STDERR = 3,
-    DLT_LOG_DROPPED = 4,
+enum DltLog {
+    DltLogToConsole = 0,
+    DltLogToSyslog = 1,
+    DltLogToFile = 2,
+    DltLogToStderr = 3,
+    DltLogDropped = 4,
 }
 
 struct MessageContext {

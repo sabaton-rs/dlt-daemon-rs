@@ -51,7 +51,7 @@ impl UserHeader {
     }
 }
 pub mod user_control_message {
-    use std::{mem, process};
+    use std::process;
 
     use crate::DltUserInner;
 

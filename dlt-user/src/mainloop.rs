@@ -17,19 +17,17 @@ pub(crate) async fn mainloop(dlt_user: Arc<Mutex<DltUserInner>>) {
             //let temp_path = temp
             println!("Incoming task started");
 
-            // TODO: Open the incoming FIFO here and loop over it 
+            // TODO: Open the incoming FIFO here and loop over it
             // asynchronously
 
-
+            //dlt_user.lock().unwrap().dlt_log_handle = Some(outgoing_fifo().unwrap());
 
             async_std::task::sleep(Duration::from_millis(100)).await;
             // something seriously wrong. Go back to outer loop and
             // try to connect again
             continue 'incoming_outer;
         }
-
     });
-
 
     let rx = dlt_user.lock().unwrap().receiver.clone();
     'outer: loop {

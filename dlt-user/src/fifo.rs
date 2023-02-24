@@ -1,15 +1,17 @@
 use crate::DltUserInner;
 use dlt_core::dlt::Error;
+
 use libc::{self, c_void, mkdir};
 use std::ffi::CString;
 use std::fs::File;
-use std::fs::OpenOptions;
+
 use std::io::{Read, Write};
-use std::os::fd::{FromRawFd, IntoRawFd};
+
+use std::fs;
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::prelude::PermissionsExt;
+use std::path::{Path, PathBuf};
 use std::process;
-use std::{fs, result};
 use std::{thread, time};
 
 static LOG_PATH: &str = "/tmp/dlt";
@@ -22,23 +24,27 @@ static IWRITE: u32 = 0200; //0200  write by user
 static IRGRP: u32 = 0400 >> 3; //0400>>3 read by group
 static IWGRP: u32 = 0200 >> 3; //0200>>3 write by group
 
-
-pub(crate) fn incoming_fifo()->Result<File,Error> {
+pub(crate) fn incoming_fifo() -> Result<(File, PathBuf), Error> {
     let mut user_path = USER_PATH.to_string();
     let process_id = process::id().to_string();
     user_path.push_str(&process_id);
 
+    let path = PathBuf::from(user_path.clone());
+
     let mode = 0o3777; //read write and execute for owner and for group
 
     //create tmp/dltpipes path with permissions
-    fs::create_dir(DIR);
+    let dirpath = Path::new(&DIR);
+    if !dirpath.exists() {
+        fs::create_dir(DIR)?;
+    }
+
     let mut perms = fs::metadata(DIR)?.permissions();
     perms.set_mode(mode);
     fs::set_permissions(DIR, perms)?;
 
     unsafe { libc::unlink(user_path.as_ptr() as *const i8) };
     //fs::remove_file(&user_path)?;
-
 
     let filename = CString::new(user_path.clone()).unwrap();
 
@@ -51,14 +57,13 @@ pub(crate) fn incoming_fifo()->Result<File,Error> {
         .read(true)
         .write(true)
         .custom_flags(libc::O_NONBLOCK | libc::O_CLOEXEC)
-        .open(user_path)?;
+        .open(user_path.clone())?;
+    thread::sleep(time::Duration::from_secs(10));
 
-    Ok(user_path_handle)
+    Ok((user_path_handle, path))
 }
 
-
-
-pub(crate) fn outgoing_fifo()->Result<File,Error> {
+pub(crate) fn outgoing_fifo() -> Result<File, Error> {
     let mut log_path = LOG_PATH.to_string();
 
     let mut log_path_handle = fs::OpenOptions::new()
@@ -70,48 +75,39 @@ pub(crate) fn outgoing_fifo()->Result<File,Error> {
     Ok(log_path_handle)
 }
 
-
-
 mod tests {
     use std::time::Duration;
 
-    use async_std::io::{ReadExt, WriteExt};
-
     use super::*;
-
 
     #[test]
     fn incoming_test() {
         let mut dltuserinner = DltUserInner::new(CONFIG).unwrap();
-        let incoming = incoming_fifo().unwrap();
+        let (incoming, handle) = incoming_fifo().unwrap();
         dltuserinner.dlt_user_handle = Some(incoming);
-        println!("{:?}",dltuserinner.dlt_user_handle);
-
+        dltuserinner.user_path = Some(handle);
+        // println!("{:?}",dltuserinner.dlt_user_handle);
     }
 
     #[test]
     fn outgoing_test() {
-        let mut dltuserinner = DltUserInner::new(CONFIG).unwrap();       
+        let mut dltuserinner = DltUserInner::new(CONFIG).unwrap();
         let incoming = outgoing_fifo().unwrap();
         dltuserinner.dlt_log_handle = Some(incoming);
-        println!("{:?}",dltuserinner.dlt_log_handle);
-
+        println!("{:?}", dltuserinner.dlt_log_handle);
     }
 
     #[test]
     fn writing_and_reading_from_incoming_test() {
-
         let mut dltuserinner = DltUserInner::new(CONFIG).unwrap();
-        let incoming = incoming_fifo().unwrap();
-        dltuserinner.dlt_user_handle = Some(incoming);
+        let (mut incoming, handle) = incoming_fifo().unwrap();
 
-        let mut user_handle = dltuserinner.dlt_user_handle.unwrap();
-        user_handle.write(b"hello world");
+        incoming.write(b"hello world");
         thread::sleep(time::Duration::from_secs(3));
 
         let mut buffer = [0; 1024];
 
-        let res = match user_handle.read(&mut buffer) {
+        let res = match incoming.read(&mut buffer) {
             Ok(bytes_read) => {
                 let message = String::from_utf8_lossy(&buffer[..bytes_read]);
                 println!("{}", message);
