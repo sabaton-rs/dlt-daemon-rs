@@ -1,13 +1,17 @@
-use crate::{fifo::fifo_connection, mainloop::mainloop};
+use crate::mainloop::mainloop;
 use async_std::channel::{self, Sender};
-use dlt_core::dlt::{DltTimeStamp, Message, MessageConfig, PayloadContent, StorageHeader};
-use libc::EILSEQ;
+use dlt_core::dlt::{
+    Argument, DltTimeStamp, Message, MessageConfig,
+    PayloadContent, StorageHeader,
+};
+
+
 use libdlt::{
     config::DaemonConfig,
     error::{DltError, DltUserError},
 };
+//use log::log_string;
 use ringbuf::HeapRb;
-use std::io::Error;
 use std::{
     env,
     fs::File,
@@ -17,7 +21,15 @@ use std::{
     thread::JoinHandle,
     u8,
 };
-use user_header::{user_control_message::RegisterApplication, UserHeader, UserMessageType};
+use std::{fs, io::Error};
+use std::{path::PathBuf};
+use user_header::{
+    user_control_message::{
+        opt_string_to_u8_4, RegisterApplication, RegisterContext, UnRegisterApplication,
+        UnRegisterContext,
+    },
+    UserHeader, UserMessageType,
+};
 
 pub(crate) mod fifo;
 pub(crate) mod log;
@@ -35,11 +47,11 @@ impl Default for LogState {
     }
 }
 
-pub(crate) fn dlt_user_log_send_register(
+pub(crate) fn user_log_send_register_application(
     inner: &mut DltUserInner,
     user_header: &UserHeader,
     register_application: &RegisterApplication,
-) -> Result<(), Error> {
+) -> Result<(), DltError> {
     /* writing into log file */
 
     let bufs = [
@@ -47,12 +59,67 @@ pub(crate) fn dlt_user_log_send_register(
         IoSlice::new(any_as_u8_slice(register_application)),
         IoSlice::new(inner.application_description.as_bytes()),
     ];
-    let result =inner.dlt_log_handle.as_ref().unwrap().write_vectored(&bufs);
-    match result {
-        Ok(_) => Ok(()),
-        Err(error) => Err(error),
+    if let Some(mut result) = inner.dlt_log_handle.as_ref() {
+        let res = result.write_vectored(&bufs)?;
+        Ok(())
+    } else {
+        Err(DltError::FileSizeError)
     }
 }
+
+pub(crate) fn user_log_send_register_context(
+    inner: &mut DltUserInner,
+    context: &Context,
+    user_header: &UserHeader,
+    register_context: &RegisterContext,
+) -> Result<(), DltError> {
+    let bufs = [
+        IoSlice::new(any_as_u8_slice(user_header)),
+        IoSlice::new(any_as_u8_slice(register_context)),
+        IoSlice::new(context.store.inner.description.as_bytes()),
+    ];
+    if let Some(mut result) = inner.dlt_log_handle.as_ref() {
+        let res = result.write_vectored(&bufs)?;
+        Ok(())
+    } else {
+        Err(DltError::FileSizeError)
+    }
+}
+
+pub(crate) fn user_log_send_unregister_app(
+    inner: &mut DltUserInner,
+    user_header: &UserHeader,
+    unregister_application: &UnRegisterApplication,
+) -> Result<(), DltError> {
+    let bufs = [
+        IoSlice::new(any_as_u8_slice(user_header)),
+        IoSlice::new(any_as_u8_slice(unregister_application)),
+    ];
+    if let Some(mut result) = inner.dlt_log_handle.as_ref() {
+        let res = result.write_vectored(&bufs)?;
+        Ok(())
+    } else {
+        Err(DltError::FileSizeError)
+    }
+}
+
+pub(crate) fn user_log_send_unregister_context(
+    inner: &mut DltUserInner,
+    user_header: &UserHeader,
+    unregister_context: &UnRegisterContext,
+) -> Result<(), DltError> {
+    let bufs = [
+        IoSlice::new(any_as_u8_slice(user_header)),
+        IoSlice::new(any_as_u8_slice(unregister_context)),
+    ];
+    if let Some(mut result) = inner.dlt_log_handle.as_ref() {
+        let res = result.write_vectored(&bufs)?;
+        Ok(())
+    } else {
+        Err(DltError::FileSizeError)
+    }
+}
+
 pub struct DltUser {
     inner: Arc<Mutex<DltUserInner>>,
 }
@@ -97,25 +164,59 @@ impl DltUser {
         let dlt_package_major_version = 2;
 
         self.dlt_check_library_version(dlt_package_minor_version, dlt_package_major_version);
-
         self.set_app_info(app_id.to_owned(), description.to_owned());
+        self.set_ecu_id(app_id.to_owned());
 
         if let Ok(mut inner) = self.inner.lock() {
             let user_header = UserHeader::new(UserMessageType::RegisterApplication);
             let register_application = RegisterApplication::new(&inner);
-
-            let res = fifo_connection(&mut inner);
-
-            let ret = dlt_user_log_send_register(&mut inner, &user_header, &register_application);
+            let ret =
+                user_log_send_register_application(&mut inner, &user_header, &register_application);
         }
-
         Ok(())
     }
 
-    pub fn register_context(&self, context_id: &str, description: &str) -> Result<Context,DltError>  {
-        self.new_context(context_id, description).ok_or(DltError::DltReturnWrongParameter)
+    pub fn register_context(
+        &self,
+        context_id: &str,
+        description: &str,
+    ) -> Result<Context, DltError> {
+        let context = self
+            .new_context(context_id, description)
+            .ok_or(DltError::DltReturnWrongParameter)
+            .unwrap();
+        if let Ok(mut inner) = self.inner.lock() {
+            let user_header = UserHeader::new(UserMessageType::RegisterContext);
+            let register_context = RegisterContext::new(&inner, &context);
+            let ret = user_log_send_register_context(
+                &mut inner,
+                &context,
+                &user_header,
+                &register_context,
+            );
+        }
+        Ok(context)
     }
 
+    pub fn unregister_application(&self) -> Result<(), DltError> {
+        if let Ok(mut inner) = self.inner.lock() {
+            let user_header = UserHeader::new(UserMessageType::UnRegisterApplication);
+            let unregister_application = UnRegisterApplication::new(&inner);
+            let ret =
+                user_log_send_unregister_app(&mut inner, &user_header, &unregister_application);
+        }
+        Ok(())
+    }
+
+    pub fn unregister_context(&self, context: &Context) -> Result<(), DltError> {
+        if let Ok(mut inner) = self.inner.lock() {
+            let user_header = UserHeader::new(UserMessageType::UnRegisterContext);
+            let unregister_context = UnRegisterContext::new(&inner, context);
+            let ret =
+                user_log_send_unregister_context(&mut inner, &user_header, &unregister_context);
+        }
+        Ok(())
+    }
 }
 
 pub fn dlt_env_extract_ll_set(
@@ -123,24 +224,16 @@ pub fn dlt_env_extract_ll_set(
     initial_log_levels: &mut Vec<InitialLogLevel>,
 ) {
     let value: Vec<&str> = env_ini_loglevels.split_terminator(':').collect();
-    let app_id: u32 = value[0].parse().unwrap();
-    let context_id: u32 = value[1].parse().unwrap();
+    let app_id: [u8; 4] = opt_string_to_u8_4(Some(value[0].to_owned()));
+    let context_id: [u8; 4] = opt_string_to_u8_4(Some(value[1].to_owned()));
     let ll: i8 = value[2].parse().unwrap();
     let initial_log_level = InitialLogLevel {
-        app_id: app_id,
-        context_id: context_id,
+        app_id,
+        context_id,
         log_level: ll,
     };
     initial_log_levels.push(initial_log_level);
-    println!(
-        "env values: app-id: {:?} cont.id: {:?} ll: {:?}",
-        initial_log_levels[0].app_id,
-        initial_log_levels[0].context_id,
-        initial_log_levels[0].log_level,
-    );
 }
-
-
 
 fn start_async_mainloop(dlt_user_inner: Arc<Mutex<DltUserInner>>) {
     let dlt_user_inner_copy = dlt_user_inner.clone();
@@ -152,6 +245,17 @@ fn start_async_mainloop(dlt_user_inner: Arc<Mutex<DltUserInner>>) {
         .replace(main);
 }
 
+pub struct DltContextData {
+    arguments: Vec<Argument>,
+}
+impl DltContextData {
+    pub fn new() -> Self {
+        todo!()
+    }
+    pub fn log_string(&mut self, maybe_name: Option<&str>, value: &str) -> Result<(), DltError> {
+        todo!()
+    }
+}
 /// Function to retrieve singleton DltUser
 pub fn dlt_user() -> &'static DltUser {
     static mut DLT_USER: MaybeUninit<DltUser> = MaybeUninit::uninit();
@@ -209,7 +313,19 @@ pub struct DltUserInner {
     receiver: channel::Receiver<Message>,
     sender: channel::Sender<Message>,
     mainloop_joinhandle: Option<JoinHandle<()>>,
-    rb : HeapRb<u8>,
+    rb: HeapRb<u8>,
+    user_path: Option<PathBuf>,
+}
+
+impl Drop for DltUserInner {
+    fn drop(&mut self) {
+        println!("inside drop");
+        if let Some(path) = self.user_path.as_ref() {
+            println!("{:?}", path.display());
+            if let Ok(()) = fs::remove_file(path) {};
+        } else {
+        }
+    }
 }
 
 impl DltUserInner {
@@ -223,7 +339,7 @@ impl DltUserInner {
         let dlt_user = DltUserInner {
             ecu_id: None,
             app_id: None,
-            config, 
+            config,
             dlt_log_handle: None,
             dlt_user_handle: None,
             logging_to_file: false,
@@ -244,50 +360,52 @@ impl DltUserInner {
             mainloop_joinhandle: None,
             log_buf_len: 1390,           //maximum size of each user buffer
             log_msg_buf_max_size: 65535, //Maximum log msg size as per autosar standard
-            rb : HeapRb::new(rb_starting_size as usize),
+            rb: HeapRb::new(rb_starting_size as usize),
+            user_path: None,
         };
 
         Ok(dlt_user)
     }
 
     fn new_context(&mut self, context_id: &str, description: &str) -> Option<Context> {
-       
         if !context_id.is_ascii() {
-            return None
+            return None;
         }
 
         if !description.is_ascii() {
-            return None
+            return None;
         }
 
-        let mut context_id_bytes = [0u8;4];
-        
-        for (i,value) in context_id.as_bytes().iter().enumerate().take(4) {
+        let mut context_id_bytes = [0u8; 4];
+
+        for (i, value) in context_id.as_bytes().iter().enumerate().take(4) {
             context_id_bytes[i] = *value;
         }
 
         // TODO: Check defaults that may be set via configuration or environment
         // variables
 
-        let inner = 
-        
-        ContextInner {
-            context_id : context_id_bytes,
+        let inner = ContextInner {
+            context_id: context_id_bytes,
             log_level: 0,
             trace_status: 1,
             message_counter: 0,
-            description : description.to_owned(),
+            description: description.to_owned(),
             sender: self.sender.clone(),
         };
-        let context_store = ContextStore{ inner: Arc::new(inner) };
+        let context_store = ContextStore {
+            inner: Arc::new(inner),
+        };
         // bail out if this context is already created
         if self.contexts.contains(&context_store) {
             println!("This context already exists");
-            return None
+            return None;
         }
-        
+
         self.contexts.push(context_store.clone());
-        Some(Context { store: context_store } )
+        Some(Context {
+            store: context_store,
+        })
     }
 }
 
@@ -303,20 +421,12 @@ pub(crate) fn dltinitcommon(
                         0 => true,
                         _ => true,
                     };
-                    println!(
-                        "env diabled exteded-verbose: {:?}",
-                        dltuserinner.use_extended_header_for_non_verbose
-                    );
                 }
                 Err(_) => println!("parsing error"),
             };
         }
         Err(e) => {
             dltuserinner.use_extended_header_for_non_verbose = true;
-            println!(
-                "default use extended-header: {:?}",
-                dltuserinner.use_extended_header_for_non_verbose
-            )
         }
     };
 
@@ -328,14 +438,9 @@ pub(crate) fn dltinitcommon(
                 "ForceOff" => LocalPrintMode::ForceOff,
                 _ => LocalPrintMode::Unset,
             };
-            println!("env local_print: {:?}", dltuserinner.local_print_mode);
         }
         Err(e) => {
             dltuserinner.local_print_mode = LocalPrintMode::Unset;
-            println!(
-                "default local-print-mode={:?}",
-                dltuserinner.local_print_mode
-            )
         }
     };
 
@@ -343,12 +448,8 @@ pub(crate) fn dltinitcommon(
         Ok(val) => {
             match val.parse::<u32>() {
                 Ok(min) => {
-                    if min > dltuserinner.config.ring_buffer_min_size.try_into().unwrap() {
+                    if min > dltuserinner.config.ring_buffer_min_size {
                         dltuserinner.config.ring_buffer_min_size = min;
-                        println!(
-                            "env min-size: {:?}",
-                            dltuserinner.config.ring_buffer_min_size
-                        );
                     }
                 }
                 Err(_) => println!("parsing error"),
@@ -356,11 +457,6 @@ pub(crate) fn dltinitcommon(
         }
         Err(e) => {
             dltuserinner.config.ring_buffer_min_size = 500000;
-            //Err(e) => {
-            println!(
-                "default min: {:?}",
-                dltuserinner.config.ring_buffer_min_size
-            )
         }
     };
 
@@ -368,12 +464,8 @@ pub(crate) fn dltinitcommon(
         Ok(val) => {
             match val.parse::<u32>() {
                 Ok(max) => {
-                    if max < dltuserinner.config.ring_buffer_max_size.try_into().unwrap() {
+                    if max < dltuserinner.config.ring_buffer_max_size {
                         dltuserinner.config.ring_buffer_max_size = max;
-                        println!(
-                            "env max-size: {:?}",
-                            dltuserinner.config.ring_buffer_max_size
-                        );
                     }
                 }
                 Err(_) => println!("parsing error"),
@@ -381,10 +473,6 @@ pub(crate) fn dltinitcommon(
         }
         Err(e) => {
             dltuserinner.config.ring_buffer_max_size = 10000000;
-            println!(
-                "default max: {:?}",
-                dltuserinner.config.ring_buffer_max_size
-            )
         }
     };
 
@@ -392,18 +480,8 @@ pub(crate) fn dltinitcommon(
         Ok(val) => {
             match val.parse::<u32>() {
                 Ok(step) => {
-                    if step
-                        > dltuserinner
-                            .config
-                            .ring_buffer_step_size
-                            .try_into()
-                            .unwrap()
-                    {
+                    if step > dltuserinner.config.ring_buffer_step_size {
                         dltuserinner.config.ring_buffer_step_size = step;
-                        println!(
-                            "env buf-step: {:?}",
-                            dltuserinner.config.ring_buffer_step_size
-                        );
                     }
                 }
                 Err(_) => println!("parsing error"),
@@ -411,10 +489,6 @@ pub(crate) fn dltinitcommon(
         }
         Err(e) => {
             dltuserinner.config.ring_buffer_step_size = 500000;
-            println!(
-                "default step: {:?}",
-                dltuserinner.config.ring_buffer_step_size
-            )
         }
     };
 
@@ -424,10 +498,8 @@ pub(crate) fn dltinitcommon(
                 Ok(len) => {
                     if len > dltuserinner.log_msg_buf_max_size {
                         dltuserinner.log_buf_len = dltuserinner.log_msg_buf_max_size;
-                        println!("env buf-len: {:?}", dltuserinner.log_buf_len);
                     } else {
                         dltuserinner.log_buf_len = len;
-                        println!("env buf-len: {:?}", dltuserinner.log_buf_len);
                     }
                 }
                 Err(_) => println!("parsing error"),
@@ -435,7 +507,6 @@ pub(crate) fn dltinitcommon(
         }
         Err(e) => {
             dltuserinner.log_buf_len = 1390;
-            println!("default len: {:?}", dltuserinner.log_buf_len)
         }
     };
 
@@ -452,11 +523,9 @@ pub(crate) fn dltinitcommon(
     match env::var("DLT_DISABLE_INJECTION_MSG_AT_USER") {
         Ok(_inj_mode) => {
             dltuserinner.config.injection_mode = false;
-            println!("env dlt-inj: {:?}", dltuserinner.config.injection_mode)
         }
         Err(_) => {
             dltuserinner.config.injection_mode = true;
-            println!("default inj: {:?}", dltuserinner.config.injection_mode)
         }
     }
 
@@ -477,24 +546,24 @@ impl Default for LocalPrintMode {
 }
 #[derive(Debug, PartialEq)]
 pub struct InitialLogLevel {
-    app_id: u32,
-    context_id: u32,
+    app_id: [u8; 4],
+    context_id: [u8; 4],
     log_level: i8,
 }
 
 /// The opaque context structure that is seen by the user
 pub struct Context {
-    store : ContextStore,
+    store: ContextStore,
 }
 
-#[derive(Clone,PartialEq)]
+#[derive(Clone, PartialEq)]
 pub(crate) struct ContextStore {
     inner: Arc<ContextInner>,
 }
 
 #[derive(Clone)]
 struct ContextInner {
-    context_id: [u8;4],
+    context_id: [u8; 4],
     log_level: i8,
     trace_status: i8,
     message_counter: u8,
@@ -508,12 +577,12 @@ impl PartialEq for ContextInner {
     }
 }
 
-enum DLT_LOG {
-    DLT_LOG_TO_CONSOLE = 0,
-    DLT_LOG_TO_SYSLOG = 1,
-    DLT_LOG_TO_FILE = 2,
-    DLT_LOG_TO_STDERR = 3,
-    DLT_LOG_DROPPED = 4,
+enum DltLog {
+    ToConsole,
+    ToSyslog,
+    ToFile,
+    ToStderr,
+    Dropped,
 }
 
 struct MessageContext {
@@ -552,22 +621,25 @@ impl MessageContext {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
 
-    use libc::sleep;
+    use std::time::Duration;
 
     use super::*;
 
     const CONFIG: &str = "../libdlt/testdata/daemon.conf";
 
     #[test]
-    fn basic() {
+    fn basic_lib() {
         let dlt_user = dlt_user();
-        dlt_user.dlt_register_app("EXU1", "THIS IS FIRST TEST");
+        std::thread::sleep(Duration::from_secs(3));
+        let regiter_app = dlt_user.dlt_register_app("FOTA", "THIS IS FIRST TEST");
+        let registered_context = dlt_user.register_context("CON", "First Context").unwrap();
+        let unregistered_context = dlt_user.unregister_context(&registered_context);
+        let unregitered_app = dlt_user.unregister_application();
 
         // This sleep is to prevent the test from exiting before the mainloop task has
         // started
-        std::thread::sleep(Duration::from_secs(20));
+        std::thread::sleep(Duration::from_secs(5));
     }
     #[test]
     fn test_verbose() {
@@ -637,8 +709,8 @@ mod tests {
         assert_eq!(
             res.unwrap().initial_log_levels[0],
             InitialLogLevel {
-                app_id: 1234,
-                context_id: 4567,
+                app_id: opt_string_to_u8_4(Some(String::from("1234"))),
+                context_id: opt_string_to_u8_4(Some(String::from("4567"))),
                 log_level: 3
             }
         );

@@ -522,9 +522,7 @@ mod tests {
 
     #[test]
     fn basic() {
-        let config =
-            DaemonConfig::from_file("/home/devuser/dlt/dlt-daemon-rs/libdlt/testdata/daemon.conf")
-                .unwrap();
+        let config = DaemonConfig::from_file("../libdlt/testdata/daemon.conf").unwrap();
         assert!(config.verbose);
         assert!(config.daemonize);
         assert!(config.send_serial_header);
