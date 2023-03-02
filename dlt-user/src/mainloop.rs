@@ -13,7 +13,7 @@ use crate::{
 };
 use async_std::io::prelude::WriteExt;
 
-pub(crate) async fn mainloop(dlt_user: Arc<Mutex<DltUserInner>>) -> ! {
+pub(crate) async fn mainloop(dlt_user: Arc<Mutex<DltUserInner>>)  {
     println!("Mainloop processing started");
 
     if let Ok(mut inner) = dlt_user.lock().as_mut() {
