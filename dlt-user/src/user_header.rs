@@ -36,6 +36,9 @@ impl From<UserMessageType> for u32 {
         }
     }
 }
+const DLT_USER_LOG_LEVEL_NOT_SET: i8 = -2;
+const DLT_USER_TRACE_STATUS_NOT_SET: i8 = -2;
+
 #[derive(Clone, Copy, Debug)]
 #[repr(C, packed)]
 pub struct UserHeader {
@@ -53,7 +56,9 @@ impl UserHeader {
 pub mod user_control_message {
     use std::process;
 
-    use crate::DltUserInner;
+    use crate::{Context, DltUserInner};
+
+    use super::{DLT_USER_LOG_LEVEL_NOT_SET, DLT_USER_TRACE_STATUS_NOT_SET};
 
     pub(crate) fn opt_string_to_u8_4(str: Option<String>) -> [u8; 4] {
         let mut result = [0u8; 4];
@@ -80,14 +85,15 @@ pub mod user_control_message {
             }
         }
     }
+    #[derive(Clone, Copy, Debug)]
     #[repr(C, packed)]
-    pub struct UnregisterApplication {
-        app_id: [u8; 4],
-        pid: u32,
+    pub(crate) struct UnRegisterApplication {
+        pub app_id: [u8; 4],
+        pub pid: u32,
     }
-    impl UnregisterApplication {
-        fn new(dltuserinner: &DltUserInner) -> Self {
-            UnregisterApplication {
+    impl UnRegisterApplication {
+        pub fn new(dltuserinner: &DltUserInner) -> Self {
+            UnRegisterApplication {
                 app_id: opt_string_to_u8_4(dltuserinner.app_id.clone()),
                 pid: process::id(),
             }
@@ -95,39 +101,39 @@ pub mod user_control_message {
     }
     #[repr(C, packed)]
     pub struct RegisterContext {
-        app_id: [u8; 4],
-        context_id: [u8; 4],
-        log_level_pos: i32,
-        log_level: i32,
-        trace_status: i8,
-        pid: u32,
-        description_length: u32,
+        pub app_id: [u8; 4],
+        pub context_id: [u8; 4],
+        pub log_level_pos: i32,
+        pub log_level: i8,
+        pub trace_status: i8,
+        pub pid: u32,
+        pub description_length: u32,
     }
     impl RegisterContext {
-        fn new(dltuserinner: &DltUserInner) -> Self {
+        pub fn new(dltuserinner: &DltUserInner, context: &Context) -> Self {
             RegisterContext {
                 app_id: opt_string_to_u8_4(dltuserinner.app_id.clone()),
-                context_id: todo!(),
+                context_id: context.store.inner.context_id,
                 log_level_pos: 0,
-                log_level: 0,
-                trace_status: todo!(),
+                log_level: DLT_USER_LOG_LEVEL_NOT_SET,
+                trace_status: DLT_USER_TRACE_STATUS_NOT_SET,
                 pid: process::id(),
-                description_length: todo!(),
+                description_length: context.store.inner.description.clone().len() as u32,
             }
         }
     }
 
     #[repr(C, packed)]
     pub struct UnRegisterContext {
-        app_id: [u8; 4],
-        context_id: [u8; 4],
-        pid: u32,
+        pub app_id: [u8; 4],
+        pub context_id: [u8; 4],
+        pub pid: u32,
     }
     impl UnRegisterContext {
-        fn new(dltuserinner: &DltUserInner) -> Self {
+        pub fn new(dltuserinner: &DltUserInner, context: &Context) -> Self {
             UnRegisterContext {
                 app_id: opt_string_to_u8_4(dltuserinner.app_id.clone()),
-                context_id: todo!(),
+                context_id: context.store.inner.context_id,
                 pid: process::id(),
             }
         }
@@ -136,8 +142,17 @@ pub mod user_control_message {
 
 #[cfg(test)]
 mod tests {
+    use std::process;
+
+    use libdlt::error::DltError;
+
     use super::*;
-    use crate::{dlt_user, user_header::user_control_message::RegisterApplication};
+    use crate::{
+        dlt_user,
+        user_header::user_control_message::{
+            RegisterApplication, RegisterContext, UnRegisterApplication, UnRegisterContext,
+        },
+    };
 
     #[test]
     fn user_header() {
@@ -147,11 +162,52 @@ mod tests {
     }
     #[test]
     fn register_application() {
-        const CONFIG: &str = "../libdlt/testdata/daemon.conf";
         let dlt_user = dlt_user();
-        dlt_user.dlt_register_app("ECU1", "THIS IS FIRST TEST");
+        dlt_user.register_app("ECU1", "THIS IS FIRST TEST");
         let register_application = RegisterApplication::new(&dlt_user.inner.lock().unwrap());
         assert_eq!(register_application.app_id, [69, 67, 85, 49]);
         assert!(register_application.description_length == 18);
+    }
+
+    #[test]
+    fn register_context() {
+        let dlt_user = dlt_user();
+        let context_id = "CON1";
+        let description = "First Context";
+        let context = dlt_user
+            .new_context(context_id, description)
+            .ok_or(DltError::DltReturnWrongParameter)
+            .unwrap();
+        let registered_context = RegisterContext::new(&dlt_user.inner.lock().unwrap(), &context);
+        assert_eq!(registered_context.app_id, [0, 0, 0, 0]);
+        assert_eq!(
+            registered_context.context_id,
+            ['C' as u8, 'O' as u8, 'N' as u8, '1' as u8]
+        );
+        assert!(registered_context.description_length == 13);
+        assert_eq!(registered_context.log_level, DLT_USER_LOG_LEVEL_NOT_SET);
+        assert!(registered_context.log_level_pos == 0);
+        assert_eq!(
+            registered_context.trace_status,
+            DLT_USER_TRACE_STATUS_NOT_SET
+        );
+        assert!(registered_context.pid == process::id());
+    }
+    #[test]
+    fn unregister_context() {
+        let dlt_user = dlt_user();
+        let registered_context = dlt_user.register_context("CON1", "First Context").unwrap();
+        let unregistered_context =
+            UnRegisterContext::new(&dlt_user.inner.lock().unwrap(), &registered_context);
+        assert_eq!(unregistered_context.app_id, [0, 0, 0, 0]);
+        assert_eq!(unregistered_context.context_id, [67, 79, 78, 49]);
+        assert!(unregistered_context.pid == process::id());
+    }
+    #[test]
+    fn unregister_application() {
+        let dlt_user = dlt_user();
+        let unregister_application = UnRegisterApplication::new(&dlt_user.inner.lock().unwrap());
+        assert_eq!(unregister_application.app_id, [0, 0, 0, 0]);
+        assert!(unregister_application.pid == process::id());
     }
 }
